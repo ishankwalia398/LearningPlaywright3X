@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JavaScript Tutorial</title>
+  <style>
+    :root { --ink:#172126; --muted:#5b6b70; --paper:#fffdf8; --teal:#0d6b68; --coral:#d85c45; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:linear-gradient(135deg,#f5efe3,#fffdf8 52%,#e1f0ed); font:16px/1.6 Georgia,serif; }
+    main { max-width:1050px; margin:auto; padding:58px 24px 70px; }
+    .eyebrow { color:var(--coral); font:700 12px/1.2 "Trebuchet MS",sans-serif; letter-spacing:2px; text-transform:uppercase; }
+    h1,h2 { font-family:"Trebuchet MS",sans-serif; line-height:1.1; }
+    h1 { max-width:720px; margin:12px 0; font-size:clamp(3rem,8vw,6.5rem); }
+    .dek { max-width:650px; color:var(--muted); font-size:1.2rem; }
+    .lessons { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:45px; }
+    a.lesson { display:block; min-height:175px; padding:22px; color:var(--ink); text-decoration:none; border-top:4px solid var(--teal); background:rgba(255,253,248,.84); transition:transform .2s, border-color .2s; }
+    a.lesson:nth-child(3n+2) { border-top-color:var(--coral); }
+    a.lesson:hover { transform:translateY(-4px); border-top-color:var(--coral); }
+    h2 { margin:0 0 8px; font-size:1.35rem; }
+    p { margin:0; color:var(--muted); }
+    .note { margin-top:30px; padding:17px 20px; border-left:4px solid var(--coral); background:rgba(255,253,248,.7); }
+    @media(max-width:700px) { .lessons { grid-template-columns:1fr; } main { padding-top:38px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">JavaScript asynchronous programming</div>
+    <h1>JavaScript Tutorial</h1>
+    <p class="dek">A practical six-part guide to callbacks, Promises, and modern async JavaScript. Choose a lesson to begin.</p>
+    <section class="lessons" aria-label="Tutorial lessons">
+      <a class="lesson" href="Async.html"><h2>Async</h2><p>How async functions return Promises and work with time.</p></a>
+      <a class="lesson" href="await.html"><h2>await</h2><p>How to read a Promise result in top-to-bottom code.</p></a>
+      <a class="lesson" href="Promise.all.html"><h2>Promise.all</h2><p>Run independent work together when every result is needed.</p></a>
+      <a class="lesson" href="Promise.race.html"><h2>Promise.race</h2><p>Use the first settled operation for timeouts and failover.</p></a>
+      <a class="lesson" href="new%20Promise.html"><h2>new Promise</h2><p>Create a Promise with explicit success and failure paths.</p></a>
+      <a class="lesson" href="Callback.html"><h2>Callback</h2><p>Understand the original way to hand work to another function.</p></a>
+    </section>
+    <p class="note"><strong>Every lesson includes a runnable example.</strong> Open this page as the project home, then follow the links to explore each concept.</p>
+  </main>
+</body>
+</html>

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Async | JavaScript Tutorial</title>
+  <style>
+    :root { --ink:#172126; --muted:#5b6b70; --paper:#fffdf8; --cream:#f5efe3; --teal:#0d6b68; --coral:#d85c45; --line:#d9d1c3; --code:#172126; }
+    * { box-sizing:border-box; } body { margin:0; color:var(--ink); background:linear-gradient(135deg,#f5efe3 0%,#fffdf8 52%,#e1f0ed 100%); font:16px/1.65 Georgia,serif; }
+    header, main, footer { max-width:1050px; margin:auto; } header { padding:54px 24px 30px; } main { padding:0 24px 48px; } footer { padding:20px 24px 50px; color:var(--muted); }
+    .eyebrow { color:var(--coral); font:700 12px/1.2 "Trebuchet MS",sans-serif; letter-spacing:2px; text-transform:uppercase; } h1,h2,h3 { font-family:"Trebuchet MS",sans-serif; line-height:1.15; } h1 { max-width:700px; margin:12px 0; font-size:clamp(2.6rem,7vw,5.5rem); } h2 { margin-top:0; font-size:1.7rem; } h3 { font-size:1.1rem; } .dek { max-width:690px; color:var(--muted); font-size:1.18rem; }
+    .grid { display:grid; grid-template-columns:1.15fr .85fr; gap:22px; } section, aside { border-top:4px solid var(--teal); background:rgba(255,253,248,.8); padding:25px; } aside { border-top-color:var(--coral); } .tip { border-left:4px solid var(--coral); padding-left:16px; } code { background:#e8f0ee; padding:2px 5px; border-radius:3px; color:#075b59; } pre { overflow:auto; margin:18px 0 0; padding:20px; color:#f6f2e9; background:var(--code); border-radius:6px; font:14px/1.55 Consolas,monospace; } button { cursor:pointer; border:0; border-radius:3px; padding:11px 16px; background:var(--coral); color:white; font:700 14px "Trebuchet MS",sans-serif; } button:hover { background:#b84937; } .output { min-height:74px; margin-top:14px; padding:13px; white-space:pre-wrap; background:#edf5f2; border:1px solid #bedbd5; font:14px/1.5 Consolas,monospace; } nav { display:flex; flex-wrap:wrap; gap:8px; margin-top:30px; } nav a { color:var(--teal); font:700 13px "Trebuchet MS",sans-serif; } @media(max-width:760px){ .grid { grid-template-columns:1fr; } header { padding-top:35px; } h1 { font-size:3.3rem; } }
+  </style>
+</head>
+<body>
+  <header><div class="eyebrow">JavaScript asynchronous programming</div><h1>Async means “this function works with time.”</h1><p class="dek">The <code>async</code> keyword marks a function that may wait for an operation, such as an API response, a file, or a browser action.</p><nav><a href="await.html">await</a><a href="Promise.all.html">Promise.all</a><a href="Promise.race.html">Promise.race</a><a href="new%20Promise.html">new Promise</a><a href="Callback.html">Callback</a></nav></header>
+  <main><div class="grid"><section><h2>The important rule</h2><p>An <code>async</code> function <strong>always returns a Promise</strong>. Even when it returns a normal string, JavaScript wraps that string in a fulfilled Promise.</p><pre><code>async function getStatus() {
+  return "Test passed";
+}
+
+getStatus().then(function (message) {
+  console.log(message);
+});</code></pre><p>Think of <code>async</code> as a promise-producing label. It does not make a slow operation magically finish sooner; it gives the function a predictable asynchronous result.</p></section><aside><h2>Try it</h2><p>This demo waits one second before returning a result.</p><button id="run">Run async function</button><div id="output" class="output">Nothing has run yet.</div><p class="tip"><strong>Notice:</strong> the page stays responsive while the timer is running.</p></aside></div><section style="margin-top:22px"><h2>Easy mental model</h2><ol><li>Call an <code>async</code> function.</li><li>Receive a Promise immediately.</li><li>Use <code>await</code> or <code>.then()</code> to read its eventual value.</li></ol><p>In test automation, this is why a test function is often declared <code>async</code>: Playwright actions return promises that the test must wait for.</p></section></main>
+  <footer>Next lesson: <a href="await.html">use await to read the value inside an async function</a>.</footer>
+  <script>document.getElementById('run').addEventListener('click',async function(){const output=document.getElementById('output');output.textContent='Waiting...';const result=await new Promise(resolve=>setTimeout(()=>resolve('Async function finished after 1 second.'),1000));output.textContent=result;});</script>
+</body>
+</html>
