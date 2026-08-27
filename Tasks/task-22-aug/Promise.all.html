@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Promise.all | JavaScript Tutorial</title>
+  <style>
+    :root { --ink:#172126; --muted:#5b6b70; --teal:#0d6b68; --coral:#d85c45; --code:#172126; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:linear-gradient(135deg,#f5efe3,#fffdf8 52%,#e1f0ed); font:16px/1.65 Georgia,serif; }
+    header,main,footer { max-width:1050px; margin:auto; }
+    header { padding:54px 24px 30px; } main { padding:0 24px 48px; } footer { padding:20px 24px 50px; color:var(--muted); }
+    .eyebrow { color:var(--coral); font:700 12px/1.2 "Trebuchet MS",sans-serif; letter-spacing:2px; text-transform:uppercase; }
+    h1,h2,h3 { font-family:"Trebuchet MS",sans-serif; line-height:1.15; } h1 { margin:12px 0; font-size:clamp(2.6rem,7vw,5.5rem); } h2 { margin-top:0; font-size:1.7rem; }
+    .dek { max-width:720px; color:var(--muted); font-size:1.18rem; } .grid { display:grid; grid-template-columns:1.15fr .85fr; gap:22px; }
+    section,aside { border-top:4px solid var(--teal); background:rgba(255,253,248,.84); padding:25px; } aside { border-top-color:var(--coral); }
+    code { background:#e8f0ee; padding:2px 5px; border-radius:3px; color:#075b59; } pre { overflow:auto; padding:20px; color:#f6f2e9; background:var(--code); border-radius:6px; font:14px/1.55 Consolas,monospace; }
+    button { cursor:pointer; border:0; border-radius:3px; padding:11px 16px; background:var(--coral); color:#fff; font:700 14px "Trebuchet MS",sans-serif; }
+    .output { min-height:88px; margin-top:14px; padding:13px; white-space:pre-wrap; background:#edf5f2; border:1px solid #bedbd5; font:14px/1.5 Consolas,monospace; }
+    nav { display:flex; flex-wrap:wrap; gap:8px; margin-top:30px; } nav a { color:var(--teal); font:700 13px "Trebuchet MS",sans-serif; } .tip { border-left:4px solid var(--coral); padding-left:16px; }
+    @media(max-width:760px) { .grid { grid-template-columns:1fr; } header { padding-top:35px; } h1 { font-size:3.3rem; } }
+  </style>
+</head>
+<body>
+  <header><div class="eyebrow">Promise combinators</div><h1>Promise.all waits for the whole team.</h1><p class="dek">Use <code>Promise.all</code> when several operations are independent but every result is required before continuing.</p><nav><a href="Async.html">Async</a><a href="await.html">await</a><a href="Promise.race.html">Promise.race</a><a href="new-promise.html">new Promise</a><a href="Callback.html">Callback</a></nav></header>
+  <main>
+    <div class="grid"><section>
+      <h2>All succeed, in input order</h2>
+      <pre><code>const checks = await Promise.all([
+  checkLogin(),
+  checkSearch(),
+  checkCheckout()
+]);
+
+console.log(checks);</code></pre>
+      <p>The operations start together. The returned array keeps the same order as the input array, even if the third operation finishes first.</p>
+      <h3>One rejection rejects the combined Promise</h3>
+      <p>If any operation rejects, <code>Promise.all</code> rejects, but it does not cancel the other operations. They keep running to completion, and a late rejection can surface as an unhandled rejection after your code has moved on. Use <code>try/catch</code> and give each operation deliberate error handling.</p>
+      <h3>When every outcome matters</h3>
+      <p>Use <code>Promise.allSettled</code> when you need a report containing fulfilled values and failures. Unlike <code>Promise.all</code>, it waits for every input to settle.</p>
+      <pre><code>const outcomes = await Promise.allSettled(checks);
+const failures = outcomes.filter(result => result.status === "rejected");</code></pre>
+      <h3>Playwright: arm the listener first</h3>
+      <p>Browser events can fire during the trigger. Put the listener and action in the same <code>Promise.all</code> so the listener is ready before the click.</p>
+      <pre><code>const [popup] = await Promise.all([
+  page.waitForEvent("popup"),
+  page.getByRole("link", { name: "Open report" }).click(),
+]);
+
+const [download] = await Promise.all([
+  page.waitForEvent("download"),
+  page.getByRole("button", { name: "Export" }).click(),
+]);</code></pre>
+      <p>The same listener-before-trigger shape works for <code>page.waitForResponse()</code>.</p>
+    </section><aside>
+      <h2>Try it</h2><button id="run">Run three checks</button><div id="output" class="output">Nothing has run yet.</div>
+      <p class="tip"><strong>Good fit:</strong> a dashboard test that needs the user, permissions, and feature flags before asserting the page.</p>
+    </aside></div>
+    <section style="margin-top:22px"><h2>Why it is faster</h2><p>Three one-second operations take about one second together, rather than about three seconds when each one is awaited before starting the next. This demo measures the elapsed time so you can see the difference.</p></section>
+  </main>
+  <footer>Need the fastest result instead? See <a href="Promise.race.html">Promise.race</a>.</footer>
+  <script>
+    function check(name, ms) { return new Promise(resolve => setTimeout(() => resolve(name + ' passed'), ms)); }
+    document.getElementById('run').onclick = async function () {
+      const output = document.getElementById('output');
+      output.textContent = 'Running all checks together...';
+      const started = performance.now();
+      const results = await Promise.all([check('Login', 900), check('Search', 500), check('Checkout', 700)]);
+      const elapsed = Math.round(performance.now() - started);
+      output.textContent = results.join('\n') + '\nAll checks completed in ' + elapsed + ' ms.';
+    };
+  </script>
+</body>
+</html>
