@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A visual research guide to Playwright architecture, isolation, parallelism, and diagnostics.">
+  <title>Playwright Architecture | A Field Guide</title>
+  <style>
+    :root {
+      --ink: #13211f;
+      --muted: #5a6b67;
+      --paper: #f5f1e8;
+      --surface: #fffdf7;
+      --line: #d7d8cc;
+      --green: #166b5f;
+      --green-dark: #0b4b43;
+      --orange: #df6d3e;
+      --yellow: #f3c76b;
+      --blue: #4c7f9a;
+      --shadow: 0 18px 55px rgba(30, 52, 45, .12);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font: 16px/1.6 Georgia, serif;
+    }
+    body::before {
+      position: fixed;
+      z-index: -1;
+      inset: 0;
+      background: radial-gradient(circle at 86% 4%, rgba(243,199,107,.38), transparent 27%), linear-gradient(115deg, rgba(22,107,95,.09), transparent 42%);
+      content: "";
+      pointer-events: none;
+    }
+    a { color: inherit; }
+    .shell { width: min(1160px, calc(100% - 40px)); margin: auto; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; padding: 24px 0; }
+    .mark { color: var(--green-dark); font: 800 13px/1 "Trebuchet MS", sans-serif; letter-spacing: .13em; text-transform: uppercase; }
+    .topbar a { color: var(--green-dark); font: 700 13px/1 "Trebuchet MS", sans-serif; text-decoration: none; }
+    .hero { display: grid; grid-template-columns: 1.08fr .92fr; gap: 70px; align-items: center; min-height: 620px; padding: 60px 0 90px; }
+    .eyebrow, .label { color: var(--orange); font: 800 12px/1.2 "Trebuchet MS", sans-serif; letter-spacing: .16em; text-transform: uppercase; }
+    h1, h2, h3 { font-family: "Trebuchet MS", sans-serif; line-height: 1.06; }
+    h1 { max-width: 700px; margin: 16px 0 24px; font-size: clamp(3.5rem, 8vw, 7rem); letter-spacing: -.04em; }
+    h1 em { color: var(--green); font-style: normal; }
+    .intro { max-width: 590px; color: var(--muted); font-size: 1.2rem; }
+    .meta { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 30px; }
+    .chip { padding: 7px 11px; border: 1px solid var(--line); border-radius: 999px; color: var(--green-dark); background: rgba(255,253,247,.7); font: 700 12px/1 "Trebuchet MS", sans-serif; }
+    .hero-visual { position: relative; min-height: 390px; padding: 20px; border: 1px solid rgba(22,107,95,.2); background: rgba(255,253,247,.66); box-shadow: var(--shadow); transform: rotate(1.5deg); }
+    .hero-visual::before { position: absolute; inset: 12px; border: 1px dashed rgba(22,107,95,.25); content: ""; pointer-events: none; }
+    .visual-note { position: absolute; top: 45px; right: 35px; color: var(--orange); font: 800 11px "Trebuchet MS", sans-serif; letter-spacing: .12em; text-transform: uppercase; transform: rotate(-8deg); }
+    .stack { display: grid; gap: 10px; margin: 70px 38px 30px; }
+    .stack div { position: relative; display: flex; justify-content: space-between; align-items: center; min-height: 54px; padding: 12px 16px; border-left: 7px solid var(--green); background: var(--surface); font: 700 14px "Trebuchet MS", sans-serif; }
+    .stack div:nth-child(2) { border-color: var(--orange); }
+    .stack div:nth-child(3) { border-color: var(--blue); }
+    .stack div:nth-child(4) { border-color: var(--yellow); }
+    .stack small { color: var(--muted); font: 12px Georgia, serif; }
+    .section { padding: 88px 0; border-top: 1px solid var(--line); }
+    .section-heading { display: flex; justify-content: space-between; gap: 35px; align-items: end; margin-bottom: 40px; }
+    h2 { max-width: 600px; margin: 9px 0 0; font-size: clamp(2rem, 4vw, 3.8rem); letter-spacing: -.035em; }
+    .section-heading p { max-width: 360px; margin: 0; color: var(--muted); }
+    .architecture { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+    .layer { min-height: 245px; padding: 24px; border: 1px solid var(--line); background: rgba(255,253,247,.78); }
+    .layer:nth-child(2) { margin-top: 28px; border-top: 5px solid var(--orange); }
+    .layer:nth-child(3) { margin-top: 56px; border-top: 5px solid var(--blue); }
+    .layer:nth-child(1) { border-top: 5px solid var(--green); }
+    .layer-number { color: var(--orange); font: 800 12px "Trebuchet MS", sans-serif; }
+    h3 { margin: 20px 0 10px; font-size: 1.4rem; }
+    .layer p, .card p { color: var(--muted); }
+    .layer ul { padding-left: 18px; color: var(--muted); }
+    .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; align-items: stretch; }
+    .flow-step { position: relative; padding: 22px 18px 20px; border: 1px solid var(--line); border-right: 0; background: var(--surface); }
+    .flow-step:last-child { border-right: 1px solid var(--line); }
+    .flow-step::after { position: absolute; top: 50%; right: -8px; z-index: 1; width: 14px; height: 14px; border-top: 1px solid var(--orange); border-right: 1px solid var(--orange); background: var(--surface); content: ""; transform: translateY(-50%) rotate(45deg); }
+    .flow-step:last-child::after { display: none; }
+    .flow-step strong { display: block; margin-bottom: 14px; color: var(--green-dark); font: 800 13px "Trebuchet MS", sans-serif; }
+    .flow-step span { display: block; color: var(--muted); font-size: .94rem; }
+    .blueprint { padding: 26px; border: 1px solid var(--line); background: rgba(255,253,247,.78); }
+    .blueprint-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px; align-items: center; margin-bottom: 28px; }
+    .command-picker { display: flex; flex-wrap: wrap; gap: 7px; }
+    .command { padding: 9px 12px; border: 1px solid var(--line); color: var(--muted); background: var(--surface); cursor: pointer; font: 700 12px "Trebuchet MS", sans-serif; }
+    .command[aria-pressed="true"] { border-color: var(--orange); color: var(--ink); background: #fff1d3; }
+    .blueprint-actions { display: flex; gap: 8px; align-items: center; }
+    .play, .reset { padding: 9px 14px; border: 0; color: var(--surface); background: var(--green); cursor: pointer; font: 800 12px "Trebuchet MS", sans-serif; }
+    .reset { color: var(--green-dark); background: #dce9df; }
+    .blueprint-status { min-height: 24px; margin: 0 0 22px; color: var(--muted); font-size: .92rem; }
+    .map { display: grid; grid-template-columns: 1fr 1.08fr 1fr; gap: 28px; }
+    .map-lane { position: relative; display: grid; gap: 9px; align-content: start; }
+    .map-lane + .map-lane::before, .map-lane + .map-lane::after { position: absolute; left: -21px; width: 14px; color: var(--orange); content: ""; text-align: center; }
+    .map-lane + .map-lane::before { top: 48%; border-top: 1px solid var(--orange); }
+    .map-lane + .map-lane::after { top: calc(48% - 5px); content: ">"; font: 700 14px "Trebuchet MS", sans-serif; }
+    .lane-title { margin: 0 0 4px; color: var(--muted); font: 800 11px "Trebuchet MS", sans-serif; letter-spacing: .14em; text-transform: uppercase; }
+    .map-node { position: relative; padding: 15px 16px; border: 1px solid var(--line); border-left: 4px solid var(--green); background: var(--surface); transition: background .2s, border-color .2s, transform .2s, box-shadow .2s; }
+    .map-node:nth-of-type(3n) { border-left-color: var(--blue); }
+    .map-node strong { display: block; color: var(--green-dark); font: 800 13px "Trebuchet MS", sans-serif; }
+    .map-node span { display: block; margin-top: 3px; color: var(--muted); font-size: .86rem; }
+    .map-node.is-active { border-color: var(--orange); background: #fff1d3; box-shadow: 0 7px 18px rgba(223,109,62,.18); transform: translateY(-3px); }
+    .map-node.is-active strong { color: #9d3f24; }
+    .map-note { margin-top: 12px; padding: 11px 13px; border-left: 3px solid var(--yellow); color: var(--muted); background: #fff8e7; font-size: .84rem; }
+    .interactive { display: grid; grid-template-columns: .36fr .64fr; gap: 18px; }
+    .tabs { display: grid; gap: 8px; align-content: start; }
+    .tab { padding: 15px 17px; border: 1px solid var(--line); color: var(--muted); background: transparent; cursor: pointer; text-align: left; font: 700 14px "Trebuchet MS", sans-serif; }
+    .tab[aria-selected="true"] { border-color: var(--green); color: var(--surface); background: var(--green); }
+    .panel { min-height: 295px; padding: 28px; background: var(--green-dark); color: #eff4ea; box-shadow: var(--shadow); }
+    .panel h3 { color: var(--yellow); margin-top: 0; }
+    .panel p { color: #c7d9d1; }
+    .code { margin-top: 22px; padding: 16px; overflow-x: auto; border-left: 3px solid var(--orange); background: rgba(0,0,0,.18); color: #fff8e4; font: 13px/1.7 Consolas, monospace; white-space: pre; }
+    .principles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    .card { padding: 26px; border: 1px solid var(--line); background: rgba(255,253,247,.72); }
+    .card h3 { margin-top: 0; }
+    .card .index { color: var(--orange); font: 800 12px "Trebuchet MS", sans-serif; }
+    .sources { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    .source { display: flex; justify-content: space-between; gap: 20px; padding: 20px 0; border-bottom: 1px solid var(--line); text-decoration: none; }
+    .source strong { font-family: "Trebuchet MS", sans-serif; }
+    .source span { color: var(--orange); font-weight: 700; }
+    footer { padding: 28px 0 55px; color: var(--muted); font-size: .9rem; }
+    footer a { color: var(--green); }
+    @media (max-width: 800px) {
+      .shell { width: min(100% - 28px, 680px); }
+      .hero { grid-template-columns: 1fr; gap: 35px; min-height: auto; padding: 55px 0 70px; }
+      .hero-visual { min-height: 330px; }
+      .section-heading, .interactive { grid-template-columns: 1fr; display: grid; }
+      .architecture, .flow, .principles, .sources { grid-template-columns: 1fr; }
+      .blueprint { padding: 18px; }
+      .map { grid-template-columns: 1fr; gap: 22px; }
+      .map-lane + .map-lane::before, .map-lane + .map-lane::after { display: none; }
+      .layer:nth-child(2), .layer:nth-child(3) { margin-top: 0; }
+      .flow-step { border-right: 1px solid var(--line); border-bottom: 0; }
+      .flow-step:last-child { border-bottom: 1px solid var(--line); }
+      .flow-step::after { top: auto; right: 50%; bottom: -8px; transform: translateX(50%) rotate(135deg); }
+      .flow-step:last-child::after { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="shell topbar">
+    <div class="mark">Field guide / 01</div>
+    <a href="https://playwright.dev/" target="_blank" rel="noreferrer">playwright.dev &#8599;</a>
+  </header>
+
+  <main>
+    <section class="shell hero">
+      <div>
+        <div class="eyebrow">Research note / 10 September</div>
+        <h1>How Playwright <em>thinks</em>.</h1>
+        <p class="intro">A practical map of the runtime behind a Playwright test: who schedules the work, where isolation lives, how browser automation crosses the process boundary, and where the evidence is collected.</p>
+        <div class="meta"><span class="chip">Test runner</span><span class="chip">Browser contexts</span><span class="chip">Cross-browser</span><span class="chip">Diagnostics</span></div>
+      </div>
+      <div class="hero-visual" aria-label="A four-layer overview of Playwright architecture">
+        <div class="visual-note">one test, one clean world</div>
+        <div class="stack">
+          <div>Test code <small>intent</small></div>
+          <div>Playwright Test <small>orchestration</small></div>
+          <div>Client + protocol <small>commands</small></div>
+          <div>Browser engine <small>Chromium / Firefox / WebKit</small></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="layers">
+      <div class="shell">
+        <div class="section-heading"><div><div class="label">The mental model</div><h2>Four layers, four jobs.</h2></div><p>Playwright feels like one API, but its reliability comes from clean ownership boundaries underneath.</p></div>
+        <div class="architecture">
+          <article class="layer"><div class="layer-number">01 / AUTHOR</div><h3>Your test</h3><p>Expresses a user journey with locators, actions, and web-first assertions. The test asks for fixtures; it does not manage browser cleanup.</p><ul><li>Readable intent</li><li>Assertions that retry</li></ul></article>
+          <article class="layer"><div class="layer-number">02 / ORCHESTRATE</div><h3>Playwright Test</h3><p>The runner discovers tests, applies configuration and projects, creates fixtures, schedules workers, retries failures, and reports results.</p><ul><li>Parallel worker processes</li><li>Project matrix and retries</li></ul></article>
+          <article class="layer"><div class="layer-number">03 / ISOLATE</div><h3>Browser context</h3><p>A fast, incognito-like profile. Cookies, storage, permissions, locale, and viewport live here. Each test gets a fresh context by default.</p><ul><li>Cheap to create</li><li>Multiple users in one test</li></ul></article>
+          <article class="layer"><div class="layer-number">04 / EXECUTE</div><h3>Browser process</h3><p>Chromium, Firefox, or WebKit performs the real browser work. Pages and frames are the surfaces your test interacts with.</p><ul><li>One API across engines</li><li>Headed or headless</li></ul></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="execution">
+      <div class="shell">
+        <div class="section-heading"><div><div class="label">One test run</div><h2>From intent to evidence.</h2></div><p>The runner owns the lifecycle, while the browser executes the commands. This is why setup and cleanup belong in fixtures and configuration.</p></div>
+        <div class="flow" aria-label="Test execution flow">
+          <div class="flow-step"><strong>01 / Discover</strong><span>Find spec files and build the project matrix.</span></div>
+          <div class="flow-step"><strong>02 / Schedule</strong><span>Workers pick up files and run them independently.</span></div>
+          <div class="flow-step"><strong>03 / Isolate</strong><span>Create a fresh context and page for the test.</span></div>
+          <div class="flow-step"><strong>04 / Act</strong><span>Send locator actions through Playwright to the browser.</span></div>
+          <div class="flow-step"><strong>05 / Explain</strong><span>Keep traces, screenshots, videos, logs, and the report.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="blueprint">
+      <div class="shell">
+        <div class="section-heading"><div><div class="label">Interactive architecture</div><h2>Play the command through the stack.</h2></div><p>Choose an API call, then watch its intent move from your test to the browser and back as evidence.</p></div>
+        <div class="blueprint">
+          <div class="blueprint-toolbar">
+            <div class="command-picker" role="group" aria-label="Choose a Playwright command">
+              <button class="command" aria-pressed="true" data-command="getByRole().click()">getByRole().click()</button>
+              <button class="command" aria-pressed="false" data-command="getByTestId().click()">getByTestId().click()</button>
+              <button class="command" aria-pressed="false" data-command="getByLabel().fill()">getByLabel().fill()</button>
+              <button class="command" aria-pressed="false" data-command="expect().toHaveText()">expect().toHaveText()</button>
+            </div>
+            <div class="blueprint-actions"><button class="play" id="play-map" type="button">Play &#9654;</button><button class="reset" id="reset-map" type="button">Reset</button></div>
+          </div>
+          <p class="blueprint-status" id="map-status" aria-live="polite">Ready. Press Play to trace <strong>getByRole().click()</strong>.</p>
+          <div class="map" aria-label="Playwright end-to-end architecture map">
+            <div class="map-lane">
+              <p class="lane-title">Your side</p>
+              <div class="map-node" data-node="test"><strong>Test file</strong><span>test.spec.ts: intent and assertions</span></div>
+              <div class="map-node" data-node="runner"><strong>Test runner</strong><span>config, projects, reporters</span></div>
+              <div class="map-node" data-node="worker"><strong>Worker process</strong><span>fixtures and test lifecycle</span></div>
+              <div class="map-note">The runner schedules work; the worker executes the test body.</div>
+            </div>
+            <div class="map-lane">
+              <p class="lane-title">Playwright driver</p>
+              <div class="map-node" data-node="client"><strong>Client SDK</strong><span>locators are lazy API proxies</span></div>
+              <div class="map-node" data-node="transport"><strong>Persistent connection</strong><span>pipe or WebSocket, commands + events</span></div>
+              <div class="map-node" data-node="driver"><strong>Node.js driver</strong><span>dispatcher, auto-wait, routing</span></div>
+              <div class="map-node" data-node="evidence"><strong>Evidence layer</strong><span>trace, screenshot, video, HTML report</span></div>
+              <div class="map-note">The driver is the intelligence and observability chokepoint.</div>
+            </div>
+            <div class="map-lane">
+              <p class="lane-title">Browser side</p>
+              <div class="map-node" data-node="protocol"><strong>Engine protocol</strong><span>CDP / Juggler / WebKit remote</span></div>
+              <div class="map-node" data-node="browser"><strong>Browser process</strong><span>Chromium, Firefox, or WebKit</span></div>
+              <div class="map-node" data-node="context"><strong>Browser context</strong><span>cookies, storage, permissions</span></div>
+              <div class="map-node" data-node="renderer"><strong>Renderer + DOM</strong><span>page JavaScript, layout, hit testing</span></div>
+              <div class="map-note">The real input event lands in the renderer, not in a fake DOM shortcut.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="deep-dive">
+      <div class="shell">
+        <div class="section-heading"><div><div class="label">Click through the boundary</div><h2>What changes at each layer?</h2></div><p>Use the tabs as a compact tour of the architecture and the decisions it enables.</p></div>
+        <div class="interactive">
+          <div class="tabs" role="tablist" aria-label="Architecture layers">
+            <button class="tab" role="tab" aria-selected="true" data-tab="runner">The runner</button>
+            <button class="tab" role="tab" aria-selected="false" data-tab="worker">The worker</button>
+            <button class="tab" role="tab" aria-selected="false" data-tab="context">The context</button>
+            <button class="tab" role="tab" aria-selected="false" data-tab="trace">The trace</button>
+          </div>
+          <div class="panel" id="tab-panel" role="tabpanel" aria-live="polite">
+            <h3>Playwright Test is the conductor.</h3>
+            <p>It turns configuration and test declarations into a controlled execution: projects, workers, fixtures, timeouts, retries, and reporters are all runner concerns.</p>
+            <div class="code">npx playwright test --project=chromium --workers=4</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="principles">
+      <div class="shell">
+        <div class="section-heading"><div><div class="label">Architecture in practice</div><h2>Design for the system you have.</h2></div><p>Most flaky tests are boundary problems: shared state escapes the context, or the test asks the runner to behave like a script.</p></div>
+        <div class="principles">
+          <article class="card"><div class="index">01 / ISOLATE DATA</div><h3>Make parallelism boring.</h3><p>Give each test unique backend data, files, and accounts. Context isolation handles browser state, not your database or shared service.</p></article>
+          <article class="card"><div class="index">02 / USE FIXTURES</div><h3>Put lifecycle near ownership.</h3><p>Use test-scoped fixtures for clean setup and worker-scoped fixtures for resources intentionally shared by one worker.</p></article>
+          <article class="card"><div class="index">03 / PREFER LOCATORS</div><h3>Describe the user surface.</h3><p>Role, label, text, and test-id locators let Playwright auto-wait for actionable elements instead of relying on sleeps and brittle selectors.</p></article>
+          <article class="card"><div class="index">04 / TRACE SELECTIVELY</div><h3>Keep failure evidence.</h3><p>On CI, trace on the first retry or retain traces on failure. The Trace Viewer connects actions to DOM snapshots, network, console, and source.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="sources">
+      <div class="shell">
+        <div class="section-heading"><div><div class="label">Research trail</div><h2>Read the primary sources.</h2></div><p>All claims on this page are distilled from Playwright's official documentation and repository materials.</p></div>
+        <div class="sources">
+          <a class="source" href="https://playwright.dev/docs/browser-contexts" target="_blank" rel="noreferrer"><strong>Isolation and browser contexts</strong><span>&#8599;</span></a>
+          <a class="source" href="https://playwright.dev/docs/test-parallel" target="_blank" rel="noreferrer"><strong>Parallelism and workers</strong><span>&#8599;</span></a>
+          <a class="source" href="https://playwright.dev/docs/library" target="_blank" rel="noreferrer"><strong>Library versus Test runner</strong><span>&#8599;</span></a>
+          <a class="source" href="https://playwright.dev/docs/test-retries" target="_blank" rel="noreferrer"><strong>Retries and worker restart</strong><span>&#8599;</span></a>
+          <a class="source" href="https://playwright.dev/docs/trace-viewer" target="_blank" rel="noreferrer"><strong>Trace Viewer</strong><span>&#8599;</span></a>
+          <a class="source" href="https://github.com/microsoft/playwright" target="_blank" rel="noreferrer"><strong>Playwright source repository</strong><span>&#8599;</span></a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="shell">Prepared as a research page for LearningPlaywright3X. Sources checked 10 September 2026. <a href="#layers">Back to the map &#8593;</a></footer>
+  <script>
+    const content = {
+      runner: { title: 'Playwright Test is the conductor.', body: 'It turns configuration and test declarations into a controlled execution: projects, workers, fixtures, timeouts, retries, and reporters are all runner concerns.', code: 'npx playwright test --project=chromium --workers=4' },
+      worker: { title: 'A worker is an independent process.', body: 'Workers run in parallel, each with its own browser. After a failure, the worker is discarded so the next test starts from a pristine environment.', code: 'workers: process.env.CI ? 2 : undefined' },
+      context: { title: 'A context is the isolation boundary.', body: 'Contexts are fast, incognito-like profiles. Cookies, storage, permissions, and pages stay inside the context, so each test can start clean.', code: 'const context = await browser.newContext();\nconst page = await context.newPage();' },
+      trace: { title: 'A trace turns failure into a timeline.', body: 'The Trace Viewer connects each action with source, DOM snapshots, screenshots, console output, network requests, and metadata.', code: "use: { trace: 'on-first-retry' }" }
+    };
+    const panel = document.querySelector('#tab-panel');
+    document.querySelectorAll('.tab').forEach((button) => {
+      button.addEventListener('click', () => {
+        const item = content[button.dataset.tab];
+        document.querySelectorAll('.tab').forEach((tab) => tab.setAttribute('aria-selected', String(tab === button)));
+        panel.innerHTML = `<h3>${item.title}</h3><p>${item.body}</p><div class="code">${item.code}</div>`;
+      });
+    });
+
+    const mapSteps = ['test', 'runner', 'worker', 'client', 'transport', 'driver', 'protocol', 'browser', 'context', 'renderer', 'evidence'];
+    const mapStatus = document.querySelector('#map-status');
+    const mapCommands = document.querySelectorAll('.command');
+    let selectedCommand = 'getByRole().click()';
+    let mapTimer;
+    let mapIndex = 0;
+    const clearMap = () => document.querySelectorAll('.map-node').forEach((node) => node.classList.remove('is-active'));
+    const stepMap = () => {
+      clearMap();
+      if (mapIndex >= mapSteps.length) {
+        mapStatus.innerHTML = `<strong>${selectedCommand}</strong> completed. The result and its diagnostics travel back through the same connection.`;
+        return;
+      }
+      const node = document.querySelector(`[data-node="${mapSteps[mapIndex]}"]`);
+      node.classList.add('is-active');
+      mapStatus.innerHTML = `Step ${mapIndex + 1} / ${mapSteps.length}: <strong>${node.querySelector('strong').textContent}</strong> receives <strong>${selectedCommand}</strong>.`;
+      mapIndex += 1;
+      mapTimer = window.setTimeout(stepMap, 650);
+    };
+    mapCommands.forEach((button) => button.addEventListener('click', () => {
+      window.clearTimeout(mapTimer);
+      selectedCommand = button.dataset.command;
+      mapCommands.forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+      mapIndex = 0;
+      clearMap();
+      mapStatus.innerHTML = `Ready. Press Play to trace <strong>${selectedCommand}</strong>.`;
+    }));
+    document.querySelector('#play-map').addEventListener('click', () => {
+      window.clearTimeout(mapTimer);
+      mapIndex = 0;
+      stepMap();
+    });
+    document.querySelector('#reset-map').addEventListener('click', () => {
+      window.clearTimeout(mapTimer);
+      mapIndex = 0;
+      clearMap();
+      mapStatus.innerHTML = `Ready. Press Play to trace <strong>${selectedCommand}</strong>.`;
+    });
+  </script>
+</body>
+</html>
