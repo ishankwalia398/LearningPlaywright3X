@@ -1,6 +1,6 @@
 import { test } from "@playwright/test";
 test("set referer for entire context", async ({ browser }) => {
-
+    
     let context = await browser.newContext({
         extraHTTPHeaders: {
             "Referer": "https://thetestingacademy.com"
