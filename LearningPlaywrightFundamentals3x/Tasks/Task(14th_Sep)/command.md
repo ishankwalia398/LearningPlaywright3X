@@ -1,1 +1,0 @@
-npx playwright test 'Tasks/Task\(14th_Sep\)/makeAppointment.spec.ts' --config=playwright.task.config.ts
