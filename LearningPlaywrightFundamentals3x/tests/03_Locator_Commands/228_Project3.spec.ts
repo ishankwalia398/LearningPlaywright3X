@@ -14,7 +14,6 @@ test("Verfiy the error message in the wingify free trial", async({ page})=>{
     await page.locator("//button[@data-qa='page-su-submit']").first().click();
 
 
-
     let error_message_text = await error_message.textContent();
 
     expect(error_message_text).toContain("The email address you entered is incorrect.");
