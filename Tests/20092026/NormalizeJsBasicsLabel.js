@@ -11,10 +11,20 @@ function normalizeJsBasicsLabel(label) {
     if (isLetter || isDigit) {
       result += char;
       lastWasHyphen = false;
-    } else if (!lastWasHyphen) {
-      result += "-";
-      lastWasHyphen = true;
+    } else {
+      if (result.length > 0 && !lastWasHyphen) {
+        result += "-";
+        lastWasHyphen = true;
+      }
     }
+  }
+
+  if (result.endsWith("-")) {
+    result = result.slice(0, -1);
+  }
+
+  if (result.length === 0) {
+    return "js-basic";
   }
 
   return "js-basic-" + result;
@@ -25,4 +35,4 @@ console.log(normalizeJsBasicsLabel("  JavaScript Setup  "));
 
 console.log(normalizeJsBasicsLabel("Identifiers & Literals"));
 
-console.log(normalizeJsBasicsLabel("typeof:    Behavior"));
+console.log(normalizeJsBasicsLabel("typeof:    Behavior!!!"));
