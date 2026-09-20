@@ -9,7 +9,14 @@ function isValidJsBasicsIdentifier(name) {
     return false;
   }
 
-  const reservedWords = ["let", "const", "var", "class", "function", "return"];
+  const reservedWords = [
+    "let",
+    "const",
+    "var",
+    "class",
+    "function",
+    "return"
+  ];
 
   if (reservedWords.includes(name)) {
     return false;
@@ -41,3 +48,15 @@ function isValidJsBasicsIdentifier(name) {
 
   return true;
 }
+
+
+console.log(isValidJsBasicsIdentifier("  loginButton  "));
+console.log(isValidJsBasicsIdentifier("_test123"));
+console.log(isValidJsBasicsIdentifier("$value_2"));
+console.log(isValidJsBasicsIdentifier("hello-world"));
+console.log(isValidJsBasicsIdentifier("hello world"));
+console.log(isValidJsBasicsIdentifier(""));
+console.log(isValidJsBasicsIdentifier("   "));
+console.log(isValidJsBasicsIdentifier(123));
+console.log(isValidJsBasicsIdentifier("const"));
+console.log(isValidJsBasicsIdentifier("returnValue"));
