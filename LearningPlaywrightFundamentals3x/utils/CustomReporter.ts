@@ -17,10 +17,62 @@ import {
 } from '@playwright/test/reporter';
 import * as fs from 'fs';
 import * as path from 'path';
-import { analyzeFailure, type RcaVerdict } from '../ai/agents/rcaAgent';
-import { analyzeFlaky, type BuildSummary, type FlakyResult } from '../ai/agents/flakyAnalyzer';
-import { hasApiKey } from '../ai/config/providers';
 import type { HealReport } from './selfHeal';
+
+export type RcaVerdict = {
+    summary: string;
+    rootCause: string;
+    confidence: 'low' | 'medium' | 'high';
+    suggestions?: string[];
+};
+
+export type BuildSummary = {
+    runId: string;
+    tests: Record<string, string>;
+};
+
+export type FlakyResult = {
+    counts: { flaky: number; failing: number };
+    items?: Array<{ test: string; previous: string; current: string; reason?: string }>;
+};
+
+const rcaModule = (() => {
+    try {
+        return require('../ai/agents/rcaAgent');
+    } catch {
+        return null;
+    }
+})();
+
+const flakyModule = (() => {
+    try {
+        return require('../ai/agents/flakyAnalyzer');
+    } catch {
+        return null;
+    }
+})();
+
+const providerModule = (() => {
+    try {
+        return require('../ai/config/providers');
+    } catch {
+        return null;
+    }
+})();
+
+const analyzeFailure = rcaModule?.analyzeFailure ?? (async () => ({
+    summary: 'AI analysis unavailable',
+    rootCause: 'The optional AI reporter module is not installed.',
+    confidence: 'low' as const,
+    suggestions: ['Install the AI integration files or remove the custom reporter AI hooks.'],
+}));
+
+const analyzeFlaky = flakyModule?.analyzeFlaky ?? (async () => ({
+    counts: { flaky: 0, failing: 0 },
+    items: [],
+}));
+
+const hasApiKey = providerModule?.hasApiKey ?? (() => false);
 
 export interface StepData {
     title: string;

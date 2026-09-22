@@ -6,3 +6,5 @@
     - npm i allure-commandline (if error use -> npm i -g allure-commandline)
 4. To see the report/results
     - allure serve allure-results/
+5. Custom report command 
+    - npx playwright test tests/05_Allure_Reporting/233_Custom_Report_TestWingify.spec.ts --reporter=line --reporter=./utils/CustomReporter.ts
