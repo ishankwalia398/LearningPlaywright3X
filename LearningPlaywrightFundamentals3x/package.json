@@ -27,6 +27,6 @@
   },
   "dependencies": {
     "allure-commandline": "^2.46.1",
-    "dotenv": "^18.0.2"
+    "dotenv": "^18.0.3"
   }
 }
