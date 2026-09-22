@@ -6,3 +6,19 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+.env
+# stray codegen screenshots
+abc.png
+
+# macOS
+.DS_Store
+
+# saved auth state (contains live session cookies)
+user-session.json
+*storage*.json
+
+# generated reports
+/tta-report/
+/allure-results/
+/allure-report/
+/reports/
