@@ -1,12 +1,13 @@
 import { test, expect } from "@playwright/test";
 
-
 // Load the saved session
 
 test.use(
     {
-        storageState : './user-session.json'
+        storageState: './user-session.json',
+        screenshot: 'only-on-failure',
     });
+
 
 
 test("go directly to dashboard — Test1", async ({ page }) => {
