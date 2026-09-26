@@ -17,7 +17,6 @@ async function findRowByName(page: Page, id: string): Promise<Locator> {
         }
 
         await next.click();
-        await page.waitForLoadState('networkidle');
     }
 }
 

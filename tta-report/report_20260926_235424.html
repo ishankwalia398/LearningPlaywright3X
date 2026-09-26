@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="5">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TTA Automation Report</title>
     <style>
@@ -836,11 +835,11 @@
         <!-- Stats Dashboard -->
         <div class="stats-dashboard">
             <div class="stat-card">
-                <div class="stat-value">0</div>
+                <div class="stat-value">1</div>
                 <div class="stat-label">Total Tests</div>
             </div>
             <div class="stat-card passed">
-                <div class="stat-value">0</div>
+                <div class="stat-value">1</div>
                 <div class="stat-label">Passed</div>
             </div>
             <div class="stat-card failed">
@@ -852,11 +851,11 @@
                 <div class="stat-label">Skipped</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">0%</div>
+                <div class="stat-value">100.0%</div>
                 <div class="stat-label">Pass Rate</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">-1s</div>
+                <div class="stat-value">27s</div>
                 <div class="stat-label">Duration</div>
             </div>
         </div>
@@ -895,7 +894,7 @@
             <button class="main-tab active" onclick="switchMainTab('results', this)">📋 Test Results</button>
             <button class="main-tab" onclick="switchMainTab('aidata', this)">🤖 AI Data</button>
             <button class="main-tab" onclick="switchMainTab('verdict', this)">⚖️ AI Verdict</button>
-            <button class="main-tab" onclick="switchMainTab('flaky', this)">🔁 Flaky</button>
+            <button class="main-tab" onclick="switchMainTab('flaky', this)">🔁 Flaky (1)</button>
             <button class="main-tab" onclick="switchMainTab('selfheal', this)">🩹 Self-Heal</button>
         </div>
         <div id="tab-results" class="main-tab-panel active">
@@ -937,19 +936,19 @@
                 </tr>
             </thead>
             <tbody>
-                <tr class="test-row passed" data-test-id="running-ca6484c6291e1cb3de49-430ca47f458666c38874" data-tags="">
+                <tr class="test-row passed" data-test-id="test-ca6484c6291e1cb3de49-430ca47f458666c38874" data-tags="">
                     <td class="col-sno">1</td>
                     <td class="col-suite">chromium</td>
                     <td class="col-testname">
-                        <span class="test-name-link" onclick="toggleTestDetail('running-ca6484c6291e1cb3de49-430ca47f458666c38874')">Automate OrangeHRM</span>
+                        <span class="test-name-link" onclick="toggleTestDetail('test-ca6484c6291e1cb3de49-430ca47f458666c38874')">Automate OrangeHRM</span>
                     </td>
                     <td class="col-author">TTA-QA</td>
                     <td class="col-group">chromium</td>
                     <td class="col-tags"></td>
                     <td class="col-file">C:\Users\ishank.walia\Documents\AITestser\LearningPlaywright3X\LearningPlaywrightFundamentals3x\tests\Tasks\Task(26th_Sep)\Task1\AutomateOrangeHRM.spec.ts:24</td>
                     <td class="col-starttime">Sep 26, 2026, 23:54:24</td>
-                    <td class="col-endtime">Sep 26, 2026, 23:54:24</td>
-                    <td class="col-duration">0s</td>
+                    <td class="col-endtime">Sep 26, 2026, 23:55:06</td>
+                    <td class="col-duration">42s</td>
                     <td class="col-status"><span class="status-badge passed">Passed</span></td>
                     <td class="col-screenshot">
                         N/A
@@ -961,9 +960,9 @@
                         N/A
                     </td>
                 </tr>
-                <tr class="test-detail-row" id="detail-row-running-ca6484c6291e1cb3de49-430ca47f458666c38874" style="display: none;">
+                <tr class="test-detail-row" id="detail-row-test-ca6484c6291e1cb3de49-430ca47f458666c38874" style="display: none;">
                     <td colspan="14">
-                        <div class="test-detail" id="detail-running-ca6484c6291e1cb3de49-430ca47f458666c38874">
+                        <div class="test-detail" id="detail-test-ca6484c6291e1cb3de49-430ca47f458666c38874">
                             <div class="detail-panel"></div>
                         </div>
                     </td>
@@ -982,7 +981,17 @@
             <div class="ai-empty">🩹 No locator failures in this run.</div>
         </div>
         <div id="tab-flaky" class="main-tab-panel">
-            <div class="ai-empty">🔁 Flaky analysis needs two builds. Run the suite again to compare.</div>
+            
+        <div class="flaky-wrap">
+            <div class="flaky-compare">Comparing build <code>20260926_223804</code> → <code>20260926_235424</code></div>
+            <div class="flaky-counts">
+                <div class="flaky-count flaky"><div class="fc-num">1</div><div class="fc-label">Flaky</div></div>
+                <div class="flaky-count fail"><div class="fc-num">0</div><div class="fc-label">Failing (latest)</div></div>
+                <div class="flaky-count"><div class="fc-num">1</div><div class="fc-label">Total</div></div>
+            </div>
+            <div class="flaky-list"><div class="flaky-item">🔁 chromium › Tasks\Task(26th_Sep)\Task1\AutomateOrangeHRM.spec.ts › Automate OrangeHRM</div></div>
+            
+        </div>
         </div>
     </div>
 
