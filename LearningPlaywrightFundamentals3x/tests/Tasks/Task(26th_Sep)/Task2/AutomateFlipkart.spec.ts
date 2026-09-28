@@ -1,24 +1,59 @@
-import {test, expect} from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 
-test('Automate Web Table', async ({page}) => {
+async function printNameAndPrice(page: Page): Promise<void> {
+    while (true) {
+        const productCards = page.locator("//div[@data-id]");
 
-    await page.goto('https://app.thetestingacademy.com/playwright/webtable');
-    const firstPart = "//table[@aria-label='Employee Management System table']/tbody/tr[";
-    const secondPart = "]/td[";
-    const thirdPart = "]";
+        const totalCards = await productCards.count();
+        console.log(`Total products on this page: ${totalCards}`);
 
-    const rowsCount = await page.locator("//table[@aria-label='Employee Management System table']/tbody/tr").count();
-    const colsCount = await page.locator("//table[@aria-label='Employee Management System table']/tbody/tr[1]/td").count();
+        for (let i = 0; i < totalCards; i++) {
+            const card = productCards.nth(i);
+            const cameraNameLocator = card.locator("//div[contains(@class,'RG5Slk')]").first();
+            const cameraPriceLocator = card.locator("//div[contains(@class,'hZ3P6w')]").first();
 
-    for (let i = 1; i <= rowsCount; i++) {
-        for (let j = 1; j <= colsCount; j++) {
-            const dynamicPath = `${firstPart}${i}${secondPart}${j}${thirdPart}`;
-            const data = await page.locator(dynamicPath).innerText();
-            if (data.includes('Rohan.Mehta')) {
-                const precedingSibling = `${dynamicPath}/preceding-sibling::td`;
-                await page.locator(precedingSibling).click();
+            const nameCount = await cameraNameLocator.count();
+            const priceCount = await cameraPriceLocator.count();
+            if (nameCount > 0 && priceCount > 0) {
+                const cameraName = await cameraNameLocator.textContent();
+                const cameraPrice = await cameraPriceLocator.textContent();
+                console.log(`Camera Name: ${cameraName?.trim()} | ` + `Camera Price: ${cameraPrice?.trim()}`);
             }
         }
+
+        const nextButton = page.locator("//a[normalize-space()='Next']").last();
+
+        if (await nextButton.count() === 0) {
+            break;
+        }
+
+        if (!(await nextButton.isVisible())) {
+            break;
+        }
+
+        const currentUrl = page.url();
+        await Promise.all([page.waitForURL(newUrl => newUrl.toString() !== currentUrl),nextButton.click()]);
     }
-    await page.pause();
+}
+
+test('AutomateFlipkart', async ({ page }) => {
+    await page.goto('https://www.flipkart.com/');
+
+    const closePopup = page.locator("span.b3wTlE");
+    if (await closePopup.count() > 0 && await closePopup.isVisible()) {
+        await closePopup.click();
+    }
+
+    const searchBox = page.locator("//input[@name='q' and not(@readonly)]").first();
+
+    if (await searchBox.count() > 0) {
+        await expect(searchBox).toBeVisible();
+        await expect(searchBox).toBeEditable();
+        await searchBox.fill('DSLR Camera');
+        await searchBox.press('Enter');
+    }
+
+    await printNameAndPrice(page);
+
+    //await page.pause();
 });
