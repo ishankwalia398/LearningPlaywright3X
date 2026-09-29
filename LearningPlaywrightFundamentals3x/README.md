@@ -143,7 +143,15 @@ LearningPlaywrightFundamentals3x/
 │   │   ├── 240_TestCase.spec.ts      # tr:has(td:text()) row selection
 │   │   ├── 241_WebTable_Pagination.spec.ts   # page-by-page search, inline
 │   │   └── 242_WebTable_Pagination.spec.ts   # same search as a helper
-│   └── 08_.. 23_/             # remaining topics, see the curriculum table
+│   ├── 08_Web_Select_Frames_Iframe/
+│   │   ├── 243_Select_TestCase.spec.ts       # native <select> via selectOption
+│   │   ├── 244_CustomDropDown_TestCase.spec.ts     # click-then-pick custom menu
+│   │   └── 245_AdvacneCustomDropDown_TestCase.spec.ts  # searchable, multi, async
+│   ├── 09_Frame_Iframe/
+│   │   ├── 246_Iframe_TestCase.spec.ts       # a form inside one iframe
+│   │   ├── 247_Framework_TestCase.spec.ts    # enumerate frames on a frameset
+│   │   └── 248_Nested_Iframe_TestCase.spec.ts      # three levels of nesting
+│   └── 10_.. 23_/             # remaining topics, see the curriculum table
 ├── template/template.spec.ts  # starting skeleton for a new spec
 ├── ai/                        # RCA + flaky-analysis agents used by the reporter
 ├── utils/CustomReporter.ts    # custom HTML reporter (TTA branded)
@@ -1140,7 +1148,7 @@ test("navigate via the Make Appointment link", async ({ page }) => {
 | `<select>` | `combobox` | `dropdown` |
 | `<h1>` ... `<h6>` | `heading` | `title` |
 
-This is the top of the preference order from section 26. Reach for CSS (section 19) only when no role or label reaches the element, and for XPath (section 20) only when you need text matching or a parent walk.
+This is the top of the preference order from section 28. Reach for CSS (section 19) only when no role or label reaches the element, and for XPath (section 20) only when you need text matching or a parent walk.
 
 ---
 
@@ -1416,7 +1424,153 @@ Note `td[data-col="email"]` rather than `td:nth-child(3)`. When the app gives co
 
 ---
 
-## 26. Locator cheat sheet
+## 26. Dropdowns: native `<select>` versus custom widgets
+
+**Concept:** A native `<select>` is one element the browser owns, driven with `selectOption()`. A "custom dropdown" is a div pretending to be one, so it needs a click to open and a second click on the option.
+
+**Why:** Reaching for `selectOption()` on a React or Vue dropdown fails with "element is not a select", and clicking blindly at a `<select>` opens an OS-level menu Playwright cannot see into.
+
+**Q&A - why use this?**
+- **Q: How do I tell them apart?** A: Inspect the tag. A real `<option>` inside a `<select>` takes `selectOption()`. Anything else, `div[role=option]` or a styled `li`, is custom and needs click-then-click.
+- **Q: What can `selectOption()` match on?** A: Visible label, `value`, or index, and it takes an array for multi-selects. `selectOption(['a','b'])` picks two at once.
+- **Q: What's the gotcha?** A: Custom menus render in a portal at the end of `<body>`, not inside the trigger, so scoping your option locator to the trigger finds nothing. Locate the option from `page`, not from the trigger.
+
+```mermaid
+flowchart TD
+    A[A dropdown] --> B{Is the tag<br/>a real select?}
+    B -->|yes| C["selectOption&#40;'Option 2'&#41;<br/>one call, no click"]
+    B -->|no, div or li| D["click the trigger"]
+    D --> E["getByRole&#40;'option', { name }&#41;<br/>click the option"]
+    E --> F{menu stays open?<br/>multi-select}
+    F -->|yes| G["keyboard.press&#40;'Escape'&#41;"]
+```
+
+**tests/08_Web_Select_Frames_Iframe/243_Select_TestCase.spec.ts** - the native case, one call:
+
+```ts
+await page.goto("https://the-internet.herokuapp.com/dropdown");
+await page.selectOption("#dropdown", "Option 2");
+```
+
+`selectOption` fires the `change` event itself, so the preceding `click()` is not needed. Three ways to name the same option:
+
+```ts
+await page.selectOption("#dropdown", "Option 2");            // by visible label
+await page.selectOption("#dropdown", { value: "2" });        // by value attribute
+await page.selectOption("#dropdown", { index: 2 });          // by position
+await page.selectOption("#langs", ["JS", "TS"]);             // multi-select
+```
+
+**tests/08_Web_Select_Frames_Iframe/244_CustomDropDown_TestCase.spec.ts** - click to open, then pick by role:
+
+```ts
+await page.getByTestId('lang-trigger').click();
+await page.getByRole("option", { name: "JavaScript" }).click();
+
+await page.getByTestId('experience-trigger').click();
+await page.getByText("Mid-level (4-6 years)", { exact: true }).click();
+```
+
+**tests/08_Web_Select_Frames_Iframe/245_AdvacneCustomDropDown_TestCase.spec.ts** - the react-select family, four behaviours in one file:
+
+```ts
+// multi-select: the menu stays open, so Escape closes it
+await page.locator("#rs-multi").click();
+await page.getByText("Pytest", { exact: true }).click();
+await page.getByText("JUnit",  { exact: true }).click();
+await page.keyboard.press("Escape");
+
+// async: options are fetched after you type, so assert the menu before clicking
+await page.locator("#rs-async").click();
+await page.getByTestId('rs-async-input').fill('de');
+await expect(page.getByTestId('rs-async-menu')).toContainText('Delhi');
+await page.getByRole('option', { name: "Delhi", exact: true }).click();
+```
+
+That `expect(...).toContainText(...)` before the click is the important line. It retries until the fetch lands, which is what makes an async dropdown testable instead of flaky.
+
+| Dropdown | Open it? | Pick with |
+|---|:---:|---|
+| Native `<select>` | no | `selectOption()` |
+| Custom (div / li) | yes | `getByRole('option')` then click |
+| Multi custom | yes | click each, then `Escape` |
+| Async custom | yes | `expect(menu).toContainText()` first |
+
+---
+
+## 27. Frames and iframes: `frameLocator()`
+
+**Concept:** An iframe is a separate document embedded in the page, so `page.locator()` cannot see inside it. `page.frameLocator('#id')` returns a handle scoped to that document, and you chain locators off it.
+
+**Why:** Payment forms, embedded editors and legacy widgets all live in iframes, and without `frameLocator` every selector inside them times out as "not found" even though you can see the element.
+
+**Q&A - why use this?**
+- **Q: When do I reach for it?** A: The moment a selector that looks obviously right times out. Check the DOM for an `<iframe>` or `<frame>` wrapping your target.
+- **Q: How do I reach a frame inside a frame?** A: Chain it. `page.frameLocator('#outer').frameLocator('#inner')`, each call scopes into one more level.
+- **Q: What's the gotcha?** A: `frameLocator()` is **not** async. It returns a handle immediately, so `await page.frameLocator(...)` does nothing useful and misleads the next reader. Drop the `await`.
+
+```mermaid
+flowchart TD
+    A[page] -->|"locator&#40;&#41; cannot cross"| B[iframe boundary]
+    A --> C["frameLocator&#40;'#pact1'&#41;"]
+    C --> D[frame 1 document]
+    D --> E["frameLocator&#40;'#pact2'&#41;"]
+    E --> F[frame 2 document]
+    F --> G["frameLocator&#40;'#pact3'&#41;"]
+    G --> H["locator&#40;'#glaf'&#41;.fill&#40;&#41;"]
+```
+
+**tests/09_Frame_Iframe/246_Iframe_TestCase.spec.ts** - fill a form living inside one frame:
+
+```ts
+await page.goto('https://app.thetestingacademy.com/playwright/frames/');
+const vehicleFrame: FrameLocator = page.frameLocator("#frame-one");
+
+await vehicleFrame.locator('#RESULT_TextField-1').fill('Hyundai i10');
+await vehicleFrame.locator('#RESULT_TextField-2').fill('Pramod Dutta');
+await vehicleFrame.getByText('Submit registration', { exact: true }).click();
+
+const output = await vehicleFrame.locator("#vehicle-output").innerText();
+```
+
+**tests/09_Frame_Iframe/247_Framework_TestCase.spec.ts** - enumerate the frames on a frameset page before working in one:
+
+```ts
+const allFrames: Locator[] = await page.locator('//frame').all();
+console.log('total number of frames: ' + allFrames.length);
+
+for (const frame of allFrames) {
+    console.log(await frame.getAttribute('name'), ': ', await frame.getAttribute('src'));
+}
+
+const sideFrame = page.frameLocator('[name="side"]');
+await sideFrame.getByTestId('side-link-registration').click();
+```
+
+**tests/09_Frame_Iframe/248_Nested_Iframe_TestCase.spec.ts** - three levels deep, each chained off the last:
+
+```ts
+const frame1 = page.frameLocator('#pact1');
+const frame2 = frame1.frameLocator('#pact2');
+const frame3 = frame2.frameLocator('#pact3');
+
+await frame1.locator('#inp_val').fill('Aishwarya Rai');
+await frame2.locator('#jex').fill('Wife');
+await frame3.locator('#glaf').fill('Playwright');
+```
+
+| Need | Use |
+|---|---|
+| Elements inside one iframe | `page.frameLocator('#id')` |
+| Nested iframes | chain `frameLocator()` per level |
+| List the frames on the page | `page.locator('//frame').all()` or `page.frames()` |
+| The frame's own URL or name | `frame.getAttribute('src' \| 'name')` |
+
+`frameLocator` is lazy in the same way an ordinary locator is: nothing is resolved until you act on it, so it auto-waits for the frame to exist. That is why there is no need to wait for the iframe to load first.
+
+---
+
+## 28. Locator cheat sheet
 
 ```ts
 page.getByRole('button', { name: 'Submit' })   // preferred, accessibility based
@@ -1436,7 +1590,7 @@ Order of preference: role -> label -> placeholder -> text -> testid -> CSS/XPath
 
 ---
 
-## 27. Common assertions
+## 29. Common assertions
 
 ```ts
 await expect(page).toHaveTitle(/Playwright/);
@@ -1453,7 +1607,7 @@ All `expect` calls auto-wait, so you rarely need `waitForTimeout`.
 
 ---
 
-## 28. Troubleshooting
+## 30. Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
@@ -1466,7 +1620,7 @@ All `expect` calls auto-wait, so you rarely need `waitForTimeout`.
 
 ---
 
-## 29. Useful links
+## 31. Useful links
 
 - Playwright docs: https://playwright.dev/docs/intro
 - Codegen guide: https://playwright.dev/docs/codegen
