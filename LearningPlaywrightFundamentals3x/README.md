@@ -151,7 +151,15 @@ LearningPlaywrightFundamentals3x/
 │   │   ├── 246_Iframe_TestCase.spec.ts       # a form inside one iframe
 │   │   ├── 247_Framework_TestCase.spec.ts    # enumerate frames on a frameset
 │   │   └── 248_Nested_Iframe_TestCase.spec.ts      # three levels of nesting
-│   └── 10_.. 23_/             # remaining topics, see the curriculum table
+│   ├── 10_Keyboard_Hover_Drag_Drop_Calender/
+│   │   ├── 249_TestCase.spec.ts          # keyboard press, modifiers
+│   │   ├── 250_Hover_TestCase.spec.ts    # dragTo with force
+│   │   ├── 251_Drag_Drop.spec.ts         # dragTo, the simple case
+│   │   ├── 252_Advance_Drag_Drop.spec.ts # manual mouse drag with steps
+│   │   └── 253_Context_Drag_Drop.spec.ts # right click and read the menu
+│   ├── 11_JS_Alerts/
+│   │   └── 254_JS_Alerts.spec.ts         # dialog events, on vs once
+│   └── 12_.. 23_/             # remaining topics, see the curriculum table
 ├── template/template.spec.ts  # starting skeleton for a new spec
 ├── ai/                        # RCA + flaky-analysis agents used by the reporter
 ├── utils/CustomReporter.ts    # custom HTML reporter (TTA branded)
@@ -1148,7 +1156,7 @@ test("navigate via the Make Appointment link", async ({ page }) => {
 | `<select>` | `combobox` | `dropdown` |
 | `<h1>` ... `<h6>` | `heading` | `title` |
 
-This is the top of the preference order from section 28. Reach for CSS (section 19) only when no role or label reaches the element, and for XPath (section 20) only when you need text matching or a parent walk.
+This is the top of the preference order from section 30. Reach for CSS (section 19) only when no role or label reaches the element, and for XPath (section 20) only when you need text matching or a parent walk.
 
 ---
 
@@ -1570,7 +1578,152 @@ await frame3.locator('#glaf').fill('Playwright');
 
 ---
 
-## 28. Locator cheat sheet
+## 28. Keyboard, mouse, drag and drop, right click
+
+**Concept:** Beyond `click()` and `fill()`, Playwright exposes raw input devices: `page.keyboard` for key events, `page.mouse` for coordinate-level movement, and `locator.dragTo()` for the common drag case.
+
+**Why:** HTML5 drag-and-drop, canvas widgets and context menus do not respond to a plain click, they need real pointer sequences or key events the browser treats as genuine user input.
+
+**Q&A - why use this?**
+- **Q: `dragTo()` or the mouse?** A: Try `dragTo()` first, it is one line. Drop to `page.mouse` when the widget tracks intermediate movement, like a Kanban board that reorders as you hover.
+- **Q: Why does a manual drag need `steps`?** A: A single jump from source to target fires no `dragover` in between. `{ steps: 10 }` interpolates the movement so the drop zone actually registers it.
+- **Q: What's the gotcha?** A: `press('Shift+O')` already handles the modifier for you. Calling `keyboard.down('Shift')` without a matching `up()` leaves Shift stuck down for the rest of the test.
+
+```mermaid
+flowchart TD
+    A[Need an interaction] --> B{What kind?}
+    B -->|type or shortcut| C["keyboard.press&#40;'Shift+O'&#41;"]
+    B -->|simple drag| D["locator.dragTo&#40;target&#41;"]
+    B -->|drag with tracking| E["mouse.move -> down -><br/>move&#40;{steps}&#41; -> up"]
+    B -->|right click| F["click&#40;{ button: 'right' }&#41;"]
+    D -->|does not work?| E
+```
+
+**tests/10_Keyboard_Hover_Drag_Drop_Calender/249_TestCase.spec.ts** - key presses and modifiers:
+
+```ts
+await page.goto("https://keycode.info");
+
+await page.keyboard.press('A');
+await page.keyboard.press('ArrowLeft');
+await page.keyboard.press('Shift+O');     // modifier handled for you
+
+await page.keyboard.down('Shift');        // held down
+await page.keyboard.up('Shift');          // always pair it
+```
+
+**tests/10_Keyboard_Hover_Drag_Drop_Calender/251_Drag_Drop.spec.ts** - the one-liner that covers most cases:
+
+```ts
+await page.goto('https://the-internet.herokuapp.com/drag_and_drop');
+await page.locator('#column-a').dragTo(page.locator('#column-b'));
+```
+
+**tests/10_Keyboard_Hover_Drag_Drop_Calender/252_Advance_Drag_Drop.spec.ts** - a Kanban card, where the board needs the intermediate movement:
+
+```ts
+const source = page.locator('#card-write-spec');
+const target = page.locator('[data-status="in-progress"]');
+const sBox = (await source.boundingBox())!;
+const tBox = (await target.boundingBox())!;
+
+await page.mouse.move(sBox.x + sBox.width / 2, sBox.y + sBox.height / 2);
+await page.mouse.down();
+await page.mouse.move(tBox.x + tBox.width / 2, tBox.y + tBox.height / 2, { steps: 10 });
+await page.mouse.up();
+```
+
+**tests/10_Keyboard_Hover_Drag_Drop_Calender/253_Context_Drag_Drop.spec.ts** - right click, then read the menu that appears:
+
+```ts
+await page.locator('span.context-menu-one').first().click({ button: 'right' });
+
+const options: string[] = await page.locator('ul.context-menu-list span').allInnerTexts();
+console.log(options);
+
+await page.getByText('Copy', { exact: true }).first().click();
+```
+
+| Action | API |
+|---|---|
+| Type a key or shortcut | `keyboard.press('Control+A')` |
+| Type a whole string | `keyboard.type('hello')` or `fill()` |
+| Hold a modifier | `keyboard.down()` / `.up()` in pairs |
+| Simple drag | `locator.dragTo(target)` |
+| Drag with tracking | `mouse.move` / `down` / `move({steps})` / `up` |
+| Right click | `click({ button: 'right' })` |
+| Double click | `dblclick()` |
+| Hover | `hover()` |
+
+`boundingBox()` returns `null` for an element that is not rendered, which is why the examples use `!`. In a real test, assert the element is visible first rather than asserting the non-null.
+
+---
+
+## 29. JavaScript dialogs: `page.on` versus `page.once`
+
+**Concept:** `alert`, `confirm` and `prompt` open a native dialog that blocks the page. Playwright surfaces it as a `dialog` event you subscribe to, with `page.on` to handle every occurrence or `page.once` to handle only the first.
+
+**Why:** A dialog cannot be clicked like a normal element, it is browser chrome rather than DOM, so the only way to accept or dismiss it is through the event.
+
+**Q&A - why use this?**
+- **Q: `on` or `once`?** A: `once` when the action raises exactly one dialog, which is the usual case. `on` when several will fire, or when you are logging every dialog across a whole test.
+- **Q: What happens if I never subscribe?** A: Playwright auto-dismisses the dialog so your test does not hang. Register a listener and that safety net turns off, you now own accepting or dismissing it.
+- **Q: What's the gotcha?** A: Register the listener **before** the click that triggers the dialog. Attaching it afterwards is a race the dialog usually wins.
+
+```mermaid
+flowchart TD
+    A[Action fires a dialog] --> B{Listener registered?}
+    B -->|no| C[Playwright auto-dismisses]
+    B -->|"page.once"| D[Handler runs once,<br/>then removes itself]
+    B -->|"page.on"| E[Handler runs every time,<br/>stays registered]
+    D --> F["dialog.accept&#40;&#41; or .dismiss&#40;&#41;"]
+    E --> F
+    E -.->|forgot to accept| G[Page hangs until timeout]
+```
+
+| | `page.on('dialog', fn)` | `page.once('dialog', fn)` |
+|---|---|---|
+| Fires | every dialog | the first one only |
+| After firing | stays registered | removes itself |
+| Across 3 dialogs | runs 3 times | runs 1 time |
+| Remove it | `page.off('dialog', fn)` | automatic |
+| Use for | logging, repeated dialogs | one expected dialog |
+
+**tests/11_JS_Alerts/254_JS_Alerts.spec.ts** - the pattern, with the listener attached first:
+
+```ts
+test('JS Alert accept', async ({ page }) => {
+    await page.goto('https://the-internet.herokuapp.com/javascript_alerts');
+
+    let message = '';
+    page.once('dialog', async dialog => {
+        console.log('Alert type:', dialog.type());     // alert | confirm | prompt
+        message = dialog.message();
+        await dialog.accept();
+    });
+
+    await page.getByRole('button', { name: "Click for JS Alert" }).click();
+
+    expect(message).toBe('I am a JS Alert');
+    await expect(page.locator('#result')).toHaveText('You successfully clicked an alert');
+});
+```
+
+**Two rules worth repeating in class.** First, the listener goes before the click, not after, otherwise the dialog can open before anything is listening. Second, assert *outside* the handler. An `expect()` that throws inside the callback becomes an unhandled rejection rather than a test failure, so the test can pass while the assertion silently failed. Capture the message into a variable and assert on it after the click.
+
+The dialog object carries everything you need:
+
+```ts
+dialog.type()         // 'alert' | 'confirm' | 'prompt' | 'beforeunload'
+dialog.message()      // the text shown
+dialog.defaultValue() // prompt's prefilled value
+await dialog.accept('typed into the prompt');
+await dialog.dismiss();
+```
+
+---
+
+## 30. Locator cheat sheet
 
 ```ts
 page.getByRole('button', { name: 'Submit' })   // preferred, accessibility based
@@ -1590,7 +1743,7 @@ Order of preference: role -> label -> placeholder -> text -> testid -> CSS/XPath
 
 ---
 
-## 29. Common assertions
+## 31. Common assertions
 
 ```ts
 await expect(page).toHaveTitle(/Playwright/);
@@ -1607,7 +1760,7 @@ All `expect` calls auto-wait, so you rarely need `waitForTimeout`.
 
 ---
 
-## 30. Troubleshooting
+## 32. Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
@@ -1620,7 +1773,7 @@ All `expect` calls auto-wait, so you rarely need `waitForTimeout`.
 
 ---
 
-## 31. Useful links
+## 33. Useful links
 
 - Playwright docs: https://playwright.dev/docs/intro
 - Codegen guide: https://playwright.dev/docs/codegen

@@ -22,3 +22,8 @@ user-session.json
 /allure-results/
 /allure-report/
 /reports/
+
+# stray screenshots from keyboard lessons
+/A.png
+/O.png
+/ArrowLeft.png
