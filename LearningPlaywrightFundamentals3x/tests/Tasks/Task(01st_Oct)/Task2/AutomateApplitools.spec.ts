@@ -1,6 +1,6 @@
 import {test, expect} from '@playwright/test';
 
-test('Automate Hover Menu', async ({ page }) => {
+test('Automate Applitools', async ({ page }) => {
     await page.goto('https://demo.applitools.com/');
     await page.locator('#username').fill('Admin');
     await page.locator('#password').fill('Password@123');
