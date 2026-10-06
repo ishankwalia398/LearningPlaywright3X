@@ -159,8 +159,26 @@ LearningPlaywrightFundamentals3x/
 │   │   └── 253_Context_Drag_Drop.spec.ts # right click and read the menu
 │   ├── 11_JS_Alerts/
 │   │   └── 254_JS_Alerts.spec.ts         # dialog events, on vs once
-│   └── 12_.. 23_/             # remaining topics, see the curriculum table
+│   ├── 12_Handle_SVG/
+│   │   ├── 255_SVG_TestCase.spec.ts      # svg click on a live site
+│   │   ├── 256_SVG_Advance_TC.spec.ts    # shapes, chart bars, ARIA roles
+│   │   ├── 257_SVG_Map_TC.spec.ts        # map paths via namespace-aware XPath
+│   │   └── 258_SVG_Map_TC_Optimized.spec.ts   # same map, CSS path selector
+│   ├── 13_Shadow_DOM/
+│   │   └── 259_Shadow_DOM_TC.spec.ts     # locators pierce open shadow roots
+│   ├── 14_FileUpload/
+│   │   ├── 260_FileUpload_TC.spec.ts     # one file from disk, asserted
+│   │   ├── 261_FileUpload_TC.spec.ts     # single upload on the TTA widget
+│   │   ├── 262_Multiple_FileUpload_TC.spec.ts      # in-memory Buffer files
+│   │   ├── 263_Multiple_FileUpload_Disk_TC.spec.ts # two real jpgs from disk
+│   │   ├── 264_Mixed_FileUpload_TC.spec.ts         # pdf + jpg + doc together
+│   │   ├── 265_FileUpload_OtherDir_TC.spec.ts      # fixtures in test-data/
+│   │   └── *.jpg, *.pdf, *.doc           # upload fixtures
+│   └── 15_File_Download/
+│       └── 266_FileDownload_TC.spec.ts   # waitForEvent before the click
+
 ├── template/template.spec.ts  # starting skeleton for a new spec
+├── test-data/uploads/         # shared upload fixtures (see section 32)
 ├── ai/                        # RCA + flaky-analysis agents used by the reporter
 ├── utils/CustomReporter.ts    # custom HTML reporter (TTA branded)
 ├── docs/images/               # architecture diagram (png + html source)
@@ -1156,7 +1174,7 @@ test("navigate via the Make Appointment link", async ({ page }) => {
 | `<select>` | `combobox` | `dropdown` |
 | `<h1>` ... `<h6>` | `heading` | `title` |
 
-This is the top of the preference order from section 30. Reach for CSS (section 19) only when no role or label reaches the element, and for XPath (section 20) only when you need text matching or a parent walk.
+This is the top of the preference order from section 34. Reach for CSS (section 19) only when no role or label reaches the element, and for XPath (section 20) only when you need text matching or a parent walk.
 
 ---
 
@@ -1723,7 +1741,276 @@ await dialog.dismiss();
 
 ---
 
-## 30. Locator cheat sheet
+## 30. SVG elements: charts, shapes and maps
+
+**Concept:** SVG lives in its own XML namespace, so an `<svg>` and its `<path>`, `<circle>` and `<rect>` children are not ordinary HTML elements. Playwright's CSS engine reaches them fine, but XPath needs `name()` and the DOM `className` property behaves differently.
+
+**Why:** Charts, interactive maps and icon systems are all SVG, and the usual reflex of grabbing an element by class quietly fails on them in ways that look like a broken selector rather than a namespace issue.
+
+**Q&A - why use this?**
+- **Q: Why does my XPath find nothing?** A: XPath is namespace-aware, so `//svg//path` matches nothing. Write `//*[name()='svg']//*[name()='path']` instead, which is what makes the map example work.
+- **Q: Do CSS selectors work on SVG?** A: Yes. `page.locator('#circle-blue')` and `page.locator('.bar')` are the easy path and should be your first choice. The `class` attribute is also readable with `getAttribute('class')`.
+- **Q: What's the gotcha?** A: An SVG element's `className` is an `SVGAnimatedString` object, not a string, so JavaScript that does `el.className.includes(...)` breaks. Read the attribute with `getAttribute('class')` instead.
+
+```mermaid
+flowchart TD
+    A[Target inside an SVG] --> B{Which engine?}
+    B -->|CSS, preferred| C["locator&#40;'#circle-blue'&#41;<br/>locator&#40;'.bar'&#41;"]
+    B -->|role, if exposed| D["getByRole&#40;'button', { name: /Q3 bar/ }&#41;"]
+    B -->|XPath| E["//*[name&#40;&#41;='svg']//*[name&#40;&#41;='path']<br/>name&#40;&#41; is required"]
+    C & D & E --> F["getAttribute&#40;'class'&#41;<br/>not .className"]
+```
+
+**tests/12_Handle_SVG/256_SVG_Advance_TC.spec.ts** - clicking shapes and reading chart bar data:
+
+```ts
+await page.locator('#circle-blue').click();
+expect(await page.locator('#shapes-output').innerText()).toContain('Blue circle');
+
+// SVG nodes can carry ARIA roles, and then the usual locators just work
+await page.getByRole('button', { name: /Q3 bar/ }).click();
+await page.getByRole('radio', { name: '4 stars' }).click();
+
+for (const bar of await page.locator('.bar').all()) {
+    console.log(await bar.getAttribute('data-quarter'), await bar.getAttribute('height'));
+}
+```
+
+**tests/12_Handle_SVG/257_SVG_Map_TC.spec.ts** - an interactive map, where each state is a `<path>` carrying an ISO code in its class:
+
+```ts
+const states = await page.locator(
+    "//div[@id='admin1_map_inner']//*[name()='svg']//*[name()='path' and contains(@class,'sm_state')]"
+).all();
+
+for (const state of states) {
+    const cls = await state.getAttribute('class');
+    if (cls?.includes('INUP')) {
+        await state.click();          // Uttar Pradesh
+    }
+}
+```
+
+**tests/12_Handle_SVG/258_SVG_Map_TC_Optimized.spec.ts** - the same idea with a plain CSS `path` selector, which is shorter but matches every path on the page.
+
+**The version to keep.** Scanning every path and testing the class in JavaScript is a loop over the whole map. Playwright can do the filtering in the selector, which is one round trip instead of forty:
+
+```ts
+await page.locator('path.sm_state[class*="INUP"]').click();
+```
+
+| Need | Write |
+|---|---|
+| Shape by id | `page.locator('#circle-blue')` |
+| All chart bars | `page.locator('.bar')` |
+| SVG with an ARIA role | `page.getByRole('button', { name: /Q3/ })` |
+| XPath into SVG | `//*[name()='svg']//*[name()='path']` |
+| Read the class | `getAttribute('class')`, never `.className` |
+| Filter by class in the selector | `path[class*="INUP"]` |
+
+Two habits worth carrying out of these files: `await` every `click()` inside a loop, an un-awaited click is a floating promise that may never run before the test ends; and keep `page.pause()` outside the loop, inside it the Inspector reopens on every iteration.
+
+---
+
+## 31. Shadow DOM: why it needs no special API
+
+**Concept:** A web component can attach a shadow root, a separate DOM tree hidden inside the element. Playwright's selector engine pierces **open** shadow roots automatically, so ordinary locators reach inside with no extra step.
+
+**Why:** Every other tool makes you hop into the shadow root by hand. Knowing Playwright does it for you saves people from writing `evaluate()` gymnastics that are not needed.
+
+**Q&A - why use this?**
+- **Q: Do I need a `shadowLocator()` the way iframes need `frameLocator()`?** A: No, and this is the key contrast with section 27. CSS and the `getBy*` locators cross open shadow boundaries on their own.
+- **Q: When does it stop working?** A: Two cases. `attachShadow({ mode: 'closed' })` is genuinely unreachable, and **XPath never pierces a shadow root**, so an XPath that works in the light DOM silently matches nothing inside a component.
+- **Q: What's the gotcha?** A: Nesting. A component inside another component is still reachable, but scoping your locator to the outer host makes the intent clear and avoids matching a sibling component with the same inner markup.
+
+```mermaid
+flowchart TD
+    A[page.locator / getByTestId] --> B{Boundary type}
+    B -->|iframe| C["needs frameLocator&#40;&#41;<br/>see section 27"]
+    B -->|open shadow root| D[pierced automatically<br/>CSS and getBy* just work]
+    B -->|closed shadow root| E[unreachable]
+    D --> F["XPath still fails here<br/>use CSS instead"]
+```
+
+**tests/13_Shadow_DOM/259_Shadow_DOM_TC.spec.ts** - scoping to the host, then reaching inside it:
+
+```ts
+const card = page.getByTestId('card-account-card');
+await card.locator('input[name="email"]').fill('student@thetestingacademy.com');
+await card.locator('input[name="password"]').fill('pw');
+await card.getByTestId('card-account-submit').click();
+
+await expect(page.getByTestId('card-account-status'))
+   .toContainText('student@thetestingacademy.com');
+```
+
+`card` is the custom element; `card.locator('input[name="email"]')` is inside its shadow root. No hop, no `evaluate`.
+
+The same file drives a counter component and a component nested inside another:
+
+```ts
+const cart = page.getByTestId('counter-cart');
+await cart.getByRole('button', { name: 'Increment' }).click();
+await expect(cart.getByTestId('counter-value')).toHaveText('5');
+
+// nested component, reached from the page root
+await page.getByTestId('card-inside-email').fill('pramod@thetestingacademy.com');
+await page.getByTestId('card-inside-submit').click();
+```
+
+| Boundary | Reach it with |
+|---|---|
+| iframe | `page.frameLocator('#id')` |
+| open shadow root | nothing special, locators pierce it |
+| closed shadow root | not reachable from a test |
+| shadow root, via XPath | does not work, switch to CSS |
+
+---
+
+## 32. File upload: `setInputFiles`
+
+**Concept:** `setInputFiles()` is the single API for uploads. Point it at paths on disk, or hand it objects that synthesize a file in memory, and it sets the `<input type="file">` directly.
+
+**Why:** The OS file picker is native chrome that no browser automation can drive. `setInputFiles` bypasses the dialog entirely by setting the input's files.
+
+**Q&A - why use this?**
+- **Q: Path or buffer?** A: Path for real fixtures you want in the repo (a genuine PDF, a real image). Buffer when the content should not land in git, or should vary per test.
+- **Q: Does the input need to be visible?** A: No. It works on hidden inputs, which is exactly what styled dropzones use. No `force: true`, no scrolling.
+- **Q: What's the gotcha?** A: The browser silently drops files the input's `accept` attribute rejects. `setInputFiles` still succeeds, so without an assertion the test passes while nothing was uploaded.
+
+```mermaid
+flowchart TD
+    Q{Have a real file?} -->|yes| A["setInputFiles&#40;path&#41;"]
+    Q -->|no, synthesize| B["setInputFiles&#40;{ name, mimeType, buffer }&#41;"]
+    A --> C[input.files is set,<br/>change event fires]
+    B --> C
+    C --> D{matches the<br/>accept attribute?}
+    D -->|yes| E[accepted]
+    D -->|no| F[silently dropped,<br/>no error thrown]
+```
+
+**tests/14_FileUpload/260_FileUpload_TC.spec.ts** - one real file, asserted:
+
+```ts
+const filePath = path.join(__dirname, 'testdata.txt');
+await page.locator("#file-upload").setInputFiles([filePath]);
+await page.getByRole("button", { name: "Upload" }).click();
+await expect(page.locator('#uploaded-files')).toContainText('testdata.txt');
+```
+
+**tests/14_FileUpload/262_Multiple_FileUpload_TC.spec.ts** - several files invented in memory:
+
+```ts
+await page.locator("div.pf-v6-c-multiple-file-upload input").setInputFiles([
+   { name: 'file1.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('image bytes') },
+   { name: 'file2.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('this is test') },
+]);
+```
+
+**tests/14_FileUpload/264_Mixed_FileUpload_TC.spec.ts** - three MIME types at once, read from disk:
+
+```ts
+const files = [
+   path.join(__dirname, 'sample.pdf'),
+   path.join(__dirname, 'sample.jpg'),
+   path.join(__dirname, 'sample.doc'),
+];
+await page.locator("div.pf-v6-c-multiple-file-upload input").setInputFiles(files);
+
+const uploadArea = page.locator('div.pf-v6-c-multiple-file-upload');
+await expect(uploadArea).toContainText('sample.pdf');
+await expect(uploadArea).toContainText('sample.doc');
+```
+
+**The `accept` trap, found while writing these.** That PatternFly dropzone declares:
+
+```
+image/jpeg,.jpg,.jpeg,application/msword,.doc,application/pdf,.pdf,image/png,.png
+```
+
+A `.docx` passed to `setInputFiles` is accepted by the call and then **discarded by the browser**, with the widget quietly reporting "2 of 2 files uploaded". `.doc` is on the list, `.docx` is not. Nothing throws. The `toContainText` assertions above are what turn that into a failing test instead of a false pass.
+
+**tests/14_FileUpload/265_FileUpload_OtherDir_TC.spec.ts** - fixtures kept in a shared folder rather than beside the spec:
+
+```ts
+const UPLOAD_DIR = path.join(__dirname, '..', '..', 'test-data', 'uploads');
+const files = ['sample.pdf', 'sample.jpg', 'sample.doc']
+   .map(name => path.join(UPLOAD_DIR, name));
+```
+
+Always build paths from `__dirname`, never a bare `'./test-data/...'`. A relative string resolves against the **working directory**, so it breaks the moment the suite is started from somewhere else.
+
+| Need | Write |
+|---|---|
+| One file from disk | `setInputFiles(path.join(__dirname, 'f.txt'))` |
+| Several files | pass an array |
+| No file on disk | `{ name, mimeType, buffer }` |
+| Clear the selection | `setInputFiles([])` |
+| Files elsewhere in the repo | `path.join(__dirname, '..', '..', 'test-data')` |
+
+---
+
+## 33. File download: subscribe before you trigger
+
+**Concept:** A download is an event, not a return value. You register a listener for `download`, then perform the click that fires it, then await the listener to get a `Download` object.
+
+**Why:** The event fires *during* the click. Code that clicks first and starts listening afterwards is racing a thing that has already happened, and loses.
+
+**Q&A - why use this?**
+- **Q: Why not just `await click()` then `await waitForEvent('download')`?** A: Because `waitForEvent` never replays history. If the event fired before you subscribed, it is gone and you wait until the timeout.
+- **Q: What does `Promise.all` actually buy me?** A: Ordering, not parallelism. Array elements evaluate top to bottom, so `waitForEvent` registers the listener before `click()` is called.
+- **Q: What's the gotcha?** A: Do not `await` the `waitForEvent` on its own line before the click. That blocks immediately, nothing has clicked yet, and the test deadlocks until it times out.
+
+```mermaid
+sequenceDiagram
+    participant T as Test
+    participant P as Page
+    T->>P: waitForEvent&#40;'download'&#41; registers listener
+    T->>P: click&#40;&#41;
+    P-->>T: download event fires, listener catches it
+    T->>T: await the promise, get Download
+    Note over T,P: Click first and the event fires<br/>with nobody listening, then it is lost
+```
+
+**tests/15_File_Download/266_FileDownload_TC.spec.ts**:
+
+```ts
+const [staticDownload] = await Promise.all([
+   page.waitForEvent('download'),                  // ① registers first
+   page.getByTestId('download-static').click()     // ② fires the event
+]);
+
+await staticDownload.saveAs(path.join(__dirname, 'out', staticDownload.suggestedFilename()));
+```
+
+The form Playwright's docs now prefer says the same thing more plainly, and the missing `await` on the first line is the whole trick:
+
+```ts
+const downloadPromise = page.waitForEvent('download');   // register, do NOT await
+await page.getByTestId('download-static').click();       // trigger
+const download = await downloadPromise;                  // now collect
+
+expect(download.suggestedFilename()).toBe('sample-download.txt');
+await download.saveAs(path.join(__dirname, 'out', download.suggestedFilename()));
+```
+
+**Measured, not assumed.** Against the TTA download widget: listener-first caught the file in **252ms**. Clicking and then subscribing 3 seconds later **missed it entirely**, the event was never replayed. Subscribing immediately after the click happened to work, which is worse than failing, it is the kind of race that passes locally and fails on a slower CI machine.
+
+This is the same rule as the `dialog` listener in section 29. One sentence covers both: **subscribe before you trigger**. It applies to `download`, `dialog`, `popup`, `filechooser`, `request` and `response`.
+
+| Need | API |
+|---|---|
+| The suggested name | `download.suggestedFilename()` |
+| Save it somewhere | `await download.saveAs(absolutePath)` |
+| The temp path | `await download.path()` |
+| Why it failed | `await download.failure()` |
+| Allow downloads | `acceptDownloads: true`, already the default |
+
+Save paths have the same rule as upload paths: build them from `__dirname`. A bare `'./out/' + name` resolves against the working directory and drops the file wherever the runner happened to start.
+
+---
+
+## 34. Locator cheat sheet
 
 ```ts
 page.getByRole('button', { name: 'Submit' })   // preferred, accessibility based
@@ -1743,7 +2030,7 @@ Order of preference: role -> label -> placeholder -> text -> testid -> CSS/XPath
 
 ---
 
-## 31. Common assertions
+## 35. Common assertions
 
 ```ts
 await expect(page).toHaveTitle(/Playwright/);
@@ -1760,7 +2047,7 @@ All `expect` calls auto-wait, so you rarely need `waitForTimeout`.
 
 ---
 
-## 32. Troubleshooting
+## 36. Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
@@ -1773,7 +2060,7 @@ All `expect` calls auto-wait, so you rarely need `waitForTimeout`.
 
 ---
 
-## 33. Useful links
+## 37. Useful links
 
 - Playwright docs: https://playwright.dev/docs/intro
 - Codegen guide: https://playwright.dev/docs/codegen
