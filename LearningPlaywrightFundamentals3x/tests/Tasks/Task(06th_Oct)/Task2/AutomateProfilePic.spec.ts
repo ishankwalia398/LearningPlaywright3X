@@ -19,7 +19,6 @@ test.describe('Automate Profile Pic', () => {
         await expect(page).toHaveURL('https://app.thetestingacademy.com/student/settings');
         await page.getByText('Upload Photo').click();
         const filePath = path.join(__dirname, 'profilePic.jpg');
-        console.log('File Path:', filePath);
         await page.getByLabel('Upload Photo').setInputFiles([filePath]);
 
         await page.pause();
