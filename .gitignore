@@ -1,3 +1,8 @@
 .commandcode/
 LearningPlaywrightFundamentals3x/.playwright-browsers/
 .playwright-browsers
+
+# generated test reports
+/allure-results/
+/reports/
+/tta-report/
