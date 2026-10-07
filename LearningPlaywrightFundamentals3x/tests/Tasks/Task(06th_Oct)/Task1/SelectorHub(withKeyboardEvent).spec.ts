@@ -9,7 +9,12 @@ test.describe('Selector Hub', () => {
    test('Shadow DOM practice', async ({ page }) => {
       await page.locator('#kils').fill('ShadowDOM');
       await page.locator('#pizza').fill('Farmhouse');
-      await page.locator('#training').fill('Playwright');
-      await page.locator('#pwd').fill('123Abc');
+
+      await page.keyboard.press('Tab');
+      await page.keyboard.type('I am learning Playwright');
+    
+      await page.keyboard.press('Tab');
+      await page.keyboard.press('Tab');
+      await page.keyboard.type('123Abc');
    });
 });
