@@ -31,3 +31,9 @@ user-session.json
 # downloaded files from the download lesson
 /out/
 outsample-download.txt
+
+# fs lesson output
+tests/**/out/
+
+# stray fs-lesson output
+/output.json

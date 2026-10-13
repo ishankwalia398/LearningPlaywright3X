@@ -190,11 +190,22 @@ LearningPlaywrightFundamentals3x/
 │       ├── 274_Test.spec.ts              # conditional skip / slow / fail
 │       ├── 276_Test.spec.ts              # test.step breakdowns
 │       ├── 277_Tk.spec.ts                # beforeAll/Each, afterEach/All
-│       ├── 278.td.spec.ts                # describe.serial
-│       └── 279.tp.spec.ts                # tags and --grep
+│   │   ├── 278.td.spec.ts                # describe.serial
+│   │   └── 279.tp.spec.ts                # tags and --grep
+│   └── 19_Data_Driven_Testing/
+│       ├── 284_DDT_JSON_ARRAY.spec.ts    # inline array
+│       ├── 285_DDT_CSV.spec.ts           # CSV reader
+│       ├── 286_JSON_DDT.spec.ts          # JSON file
+│       ├── 287_DDT_EXCEL.spec.ts         # .xlsx, async -> test.step
+│       ├── 288_DDT_YAML.spec.ts          # YAML, sync -> test per row
+│       ├── 289_DDT_MYSQL.spec.ts         # MySQL, skips if unconfigured
+│       ├── 290_DDT_FAKER.spec.ts         # generated, seeded
+│       ├── util/                         # csv, excel, yaml, db readers
+│       └── test-data/                    # csv, yaml, xlsx, json, seed.sql
 
 ├── template/template.spec.ts  # starting skeleton for a new spec
 ├── test-data/uploads/         # shared upload fixtures (see section 32)
+├── tsconfig.json              # needed for Node globals (fs, __dirname) in the editor
 ├── ai/                        # RCA + flaky-analysis agents used by the reporter
 ├── utils/CustomReporter.ts    # custom HTML reporter (TTA branded)
 ├── docs/images/               # architecture diagram (png + html source)
@@ -1190,7 +1201,7 @@ test("navigate via the Make Appointment link", async ({ page }) => {
 | `<select>` | `combobox` | `dropdown` |
 | `<h1>` ... `<h6>` | `heading` | `title` |
 
-This is the top of the preference order from section 37. Reach for CSS (section 19) only when no role or label reaches the element, and for XPath (section 20) only when you need text matching or a parent walk.
+This is the top of the preference order from section 38. Reach for CSS (section 19) only when no role or label reaches the element, and for XPath (section 20) only when you need text matching or a parent walk.
 
 ---
 
@@ -2289,7 +2300,108 @@ npx playwright test --grep "@smoke|@p1"  # either
 
 ---
 
-## 37. Locator cheat sheet
+## 37. Data-driven testing: six sources, one page
+
+**Concept:** Data-driven testing means the test body is written once and the *data* varies, so adding a case is adding a row rather than writing another test.
+
+**Why:** Seven copy-pasted login tests drift apart the moment the form changes. One loop over seven rows changes in one place.
+
+**Q&A - why use this?**
+- **Q: When do I reach for it?** A: Whenever the same flow runs with different inputs, login matrices, validation rules, pricing tiers, locale checks.
+- **Q: Why does the shape of the spec change between sources?** A: Playwright collects tests **synchronously**. A sync reader (JSON, CSV, YAML, faker) has its data ready in time to create one `test()` per row. An async reader (Excel, MySQL) does not, so its rows become `test.step()`s inside one test.
+- **Q: What's the gotcha?** A: Test titles must be identical in the collection pass and the worker pass. Anything random in a title, a faker name without a fixed seed, breaks the run with "Test not found in the worker process".
+
+```mermaid
+flowchart TD
+    A[Data source] --> B{Reader sync<br/>or async?}
+    B -->|sync: JSON, CSV,<br/>YAML, faker| C[Rows ready at<br/>collection time]
+    C --> D["for &#40;row of rows&#41;<br/>test&#40;row.description&#41;"]
+    D --> E[One test per row<br/>own retry, own report line]
+    B -->|async: Excel, MySQL| F["beforeAll loads rows"]
+    F --> G["one test&#40;&#41; +<br/>test.step&#40;&#41; per row"]
+```
+
+| Spec | Source | Reader | Shape |
+|---|---|:---:|---|
+| 284 | inline array | sync | test per row |
+| 285 | CSV | sync | test per row |
+| 286 | JSON | sync | test per row |
+| 287 | Excel `.xlsx` | **async** | steps in one test |
+| 288 | YAML | sync | test per row |
+| 289 | MySQL | **async** | steps, skips if unconfigured |
+| 290 | faker | sync | test per row, seeded |
+
+**The sync case.** `tests/19_Data_Driven_Testing/288_DDT_YAML.spec.ts`, read at module load so each row becomes a real test:
+
+```ts
+const loginData = readYAML<LoginRow>(path.join(__dirname, 'test-data', 'login-data.yaml'));
+
+for (const data of loginData) {
+    test(`Login with : ${data.description}`, async ({ page }) => {
+        await page.getByRole('textbox', { name: 'Email Address' }).fill(data.username);
+        await page.getByRole('textbox', { name: 'Password' }).fill(data.password);
+        await page.getByRole('button', { name: 'Login to Practice Account' }).click();
+    });
+}
+```
+
+**The async case.** `tests/19_Data_Driven_Testing/287_DDT_EXCEL.spec.ts`, because `exceljs` returns a Promise:
+
+```ts
+let rows: LoginRow[] = [];
+test.beforeAll(async () => { rows = await readLoginDataFromExcel(XLSX_PATH); });
+
+test('login with every row from the spreadsheet', async ({ page }) => {
+    expect(rows.length).toBeGreaterThan(0);
+    for (const data of rows) {
+        await test.step(`Login with : ${data.description}`, async () => {
+            await page.goto(APP_URL);
+            // ... fill and click
+        });
+    }
+});
+```
+
+Each step still appears separately in the report, but the rows share one test, so they share one retry.
+
+**The database case.** `tests/19_Data_Driven_Testing/289_DDT_MYSQL.spec.ts` adds a guard so the repo stays green without a database:
+
+```ts
+test.skip(!isDbConfigured(), 'MYSQL_HOST is not set, see .env.example');
+```
+
+Seed it once with `mysql -u root -p < tests/19_Data_Driven_Testing/test-data/seed.sql`, then set `MYSQL_HOST` in `.env`.
+
+**The generated case, and its one rule.** `tests/19_Data_Driven_Testing/290_DDT_FAKER.spec.ts` invents data instead of reading it:
+
+```ts
+// The seed MUST be fixed. Playwright evaluates this file once to collect tests
+// and again inside the worker; a random seed produces different names, so the
+// titles differ between the two passes and every test is reported as
+// "Test not found in the worker process".
+const SEED = Number(process.env.FAKER_SEED ?? 20261013);
+faker.seed(SEED);
+
+const users = faker.helpers.multiple(() => ({
+    name: faker.person.fullName(),
+    email: faker.internet.email().toLowerCase(),
+    password: faker.internet.password({ length: 12 }),
+}), { count: 5 });
+```
+
+Run a different dataset with `FAKER_SEED=424242 npx playwright test ...`, and keep that number to replay a failure exactly.
+
+**Readers** live in `tests/19_Data_Driven_Testing/util/`: `csvReader.ts`, `excelReader.ts`, `yamlReader.ts`, `dbReader.ts`, and `generateExcel.js` to rebuild the spreadsheet. They all return the same `LoginRow` shape, which is what lets one page be driven by six different sources.
+
+```bash
+npm i -D exceljs js-yaml @types/js-yaml mysql2 @faker-js/faker@9
+```
+
+Note the `@9` on faker: version 10 is ESM-only and this repo is CommonJS.
+
+---
+
+## 38. Locator cheat sheet
 
 ```ts
 page.getByRole('button', { name: 'Submit' })   // preferred, accessibility based
@@ -2309,7 +2421,7 @@ Order of preference: role -> label -> placeholder -> text -> testid -> CSS/XPath
 
 ---
 
-## 38. Common assertions
+## 39. Common assertions
 
 ```ts
 await expect(page).toHaveTitle(/Playwright/);
@@ -2326,7 +2438,7 @@ All `expect` calls auto-wait, so you rarely need `waitForTimeout`.
 
 ---
 
-## 39. Troubleshooting
+## 40. Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
@@ -2339,7 +2451,7 @@ All `expect` calls auto-wait, so you rarely need `waitForTimeout`.
 
 ---
 
-## 40. Useful links
+## 41. Useful links
 
 - Playwright docs: https://playwright.dev/docs/intro
 - Codegen guide: https://playwright.dev/docs/codegen

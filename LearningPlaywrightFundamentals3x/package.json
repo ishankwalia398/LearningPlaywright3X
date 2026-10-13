@@ -21,12 +21,18 @@
   "author": "Pramod Dutta",
   "license": "MIT",
   "devDependencies": {
-    "@playwright/test": "^1.64.0",
-    "@types/node": "^26.6.4",
-    "allure-playwright": "^3.12.2"
+    "@faker-js/faker": "^9.9.0",
+    "@playwright/test": "^1.63.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^26.5.0",
+    "allure-playwright": "^3.12.2",
+    "exceljs": "^4.4.0",
+    "js-yaml": "^5.4.3",
+    "mysql2": "^3.24.5"
   },
   "dependencies": {
     "allure-commandline": "^2.46.1",
-    "dotenv": "^18.0.2"
+    "dotenv": "^18.0.2",
+    "path": "^0.12.7"
   }
 }
