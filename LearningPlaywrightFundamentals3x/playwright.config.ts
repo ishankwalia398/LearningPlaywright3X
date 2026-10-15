@@ -21,8 +21,11 @@ export default defineConfig({
     /* Base URL to use in actions like `await page.goto('')`. */
     // baseURL: 'http://localhost:3000',
 
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
+    /* Media for the custom report. 'on' captures for every test, pass or fail.
+       For a real suite prefer 'only-on-failure' / 'retain-on-failure'. */
+    screenshot: 'on',
+    video: 'on',
+    trace: 'on',
     headless: false,
     /* Full HD. The project below re-applies it after the device spread, because
        devices['Desktop Chrome'] carries its own 1280x720 viewport and

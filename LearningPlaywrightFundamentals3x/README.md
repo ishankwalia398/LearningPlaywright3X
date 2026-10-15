@@ -200,14 +200,21 @@ LearningPlaywrightFundamentals3x/
 │       ├── 288_DDT_YAML.spec.ts          # YAML, sync -> test per row
 │       ├── 289_DDT_MYSQL.spec.ts         # MySQL, skips if unconfigured
 │       ├── 290_DDT_FAKER.spec.ts         # generated, seeded
-│       ├── util/                         # csv, excel, yaml, db readers
-│       └── test-data/                    # csv, yaml, xlsx, json, seed.sql
+│   │   ├── util/                         # csv, excel, yaml, db readers
+│   │   └── test-data/                    # csv, yaml, xlsx, json, seed.sql
+│   └── 20_Page_Object_Model/
+│       ├── 291_No_POM.spec.ts            # the same test without page objects
+│       ├── 292_POM.spec.ts               # the same test with LoginPage
+│       ├── 293_cart_add_assertion.spec.ts # login -> add item -> verify cart
+│       ├── 294_heavy_page.spec.ts        # locators are lazy, methods shared
+│       └── pages/                        # LoginPage, InventoryPage, CartPage, HeavyPage
 
 ├── template/template.spec.ts  # starting skeleton for a new spec
 ├── test-data/uploads/         # shared upload fixtures (see section 32)
 ├── tsconfig.json              # needed for Node globals (fs, __dirname) in the editor
 ├── ai/                        # RCA + flaky-analysis agents used by the reporter
 ├── utils/CustomReporter.ts    # custom HTML reporter (TTA branded)
+├── utils/stepScreenshot.ts    # per-step screenshots for that reporter
 ├── docs/images/               # architecture diagram (png + html source)
 ├── playwright.config.ts       # testDir, reporter, trace, headless, projects
 ├── package.json
@@ -917,7 +924,18 @@ test('dashboard loads with media captured', async ({ page }, testInfo) => {
 | `video` | `off`, `on`, `retain-on-failure` | large, a webm per test |
 | `trace` | `off`, `on`, `on-first-retry`, `retain-on-failure` | largest, ~1.3MB per test |
 
-For real suites prefer `only-on-failure` and `on-first-retry`, which is what the repo config uses by default. `on` is for when you are demonstrating the report itself.
+This repo's config sets all three to `on`, so the custom report always has media to show. That is a teaching default, not a production one: `trace: 'on'` writes roughly 1.3MB per test, which is ~180MB across the full suite. For a real suite use `only-on-failure` and `retain-on-failure`.
+
+Per-step screenshots need one more thing. Playwright's own screenshot is a single shot at the end of a test, so every step would share one image. `utils/stepScreenshot.ts` attaches one per step under the name `CustomReporter` matches:
+
+```ts
+await test.info().attach(`step-${index}-${name}`, {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+});
+```
+
+The `step-<index>-` prefix with a 0-based index is the contract. See section 38 for it in use.
 
 Generated output (`tta-report/`, `allure-results/`, `reports/`) is gitignored. To view the Allure report:
 
@@ -1201,7 +1219,7 @@ test("navigate via the Make Appointment link", async ({ page }) => {
 | `<select>` | `combobox` | `dropdown` |
 | `<h1>` ... `<h6>` | `heading` | `title` |
 
-This is the top of the preference order from section 38. Reach for CSS (section 19) only when no role or label reaches the element, and for XPath (section 20) only when you need text matching or a parent walk.
+This is the top of the preference order from section 39. Reach for CSS (section 19) only when no role or label reaches the element, and for XPath (section 20) only when you need text matching or a parent walk.
 
 ---
 
@@ -2401,7 +2419,123 @@ Note the `@9` on faker: version 10 is ESM-only and this repo is CommonJS.
 
 ---
 
-## 38. Locator cheat sheet
+## 38. Page Object Model
+
+**Concept:** A page object is a class that owns one screen's locators and the actions you can take on it, so tests read as intent (`loginPage.login(user, pass)`) instead of selectors.
+
+**Why:** When a selector changes, a suite without page objects needs edits in every spec that touched that element. With one, it changes in a single constructor.
+
+**Q&A - why use this?**
+- **Q: Why are the locators built in the constructor rather than as class fields?** A: A `Locator` is bound to one `Page`, and the page does not exist until a test hands one over. Playwright gives every test a fresh `page` fixture, so the constructor is the first moment one is available.
+- **Q: What does `readonly` actually do?** A: It is a compile-time guard. Assignment is allowed inside the constructor and rejected everywhere after, so a stray `=` in a test cannot silently rebind a locator. It is erased at runtime and does not freeze anything.
+- **Q: Is a big page object expensive?** A: No, and this is the point of `HeavyPage.ts`. Locators are lazy, building one records a selector and never touches the browser. 100 of them construct in about 1ms.
+
+```mermaid
+flowchart TD
+    A["new LoginPage&#40;page&#41;"] --> B[constructor binds<br/>locators to THIS page]
+    B --> C[readonly fields<br/>per instance]
+    B --> D[methods on the<br/>prototype, shared]
+    C --> E["loginPage.login&#40;user, pass&#41;"]
+    D --> E
+    E --> F[test reads as intent,<br/>selectors live in one file]
+```
+
+**tests/20_Page_Object_Model/pages/LoginPage.ts** - locators plus the action that uses them:
+
+```ts
+export class LoginPage {
+    readonly page: Page;
+    readonly emailInput: Locator;
+    readonly passwordInput: Locator;
+    readonly loginButton: Locator;
+
+    constructor(page: Page) {
+        this.page = page;
+        this.emailInput = page.getByRole('textbox', { name: 'Username' });
+        this.passwordInput = page.getByRole('textbox', { name: 'Password' });
+        this.loginButton = page.locator('[data-test="login-button"]');
+    }
+
+    async goto() {
+        await this.page.goto('https://app.thetestingacademy.com/playwright/ttacart/');
+    }
+
+    async login(username: string, password: string) {
+        await this.emailInput.fill(username);
+        await this.passwordInput.fill(password);
+        await this.loginButton.click();
+    }
+}
+```
+
+**tests/20_Page_Object_Model/293_cart_add_assertion.spec.ts** - three page objects in one flow:
+
+```ts
+await test.step('login as standard_user', async () => {
+    await loginPage.login('standard_user', 'tta_secret');
+    await expect(inventoryPage.title).toHaveText('Products');
+    await shot(page, 1, 'inventory');
+});
+
+await test.step('add the first item to the cart', async () => {
+    itemName = await inventoryPage.addFirstItemToCart();   // returns the name
+    await shot(page, 2, 'item added');
+});
+
+await test.step('verify the item is in the cart', async () => {
+    await expect(cartPage.itemName).toHaveText(itemName);  // same item, not a literal
+});
+```
+
+`addFirstItemToCart()` returns the product name so the cart assertion checks the item that was actually added. That is the kind of logic worth putting in a page object.
+
+**Compare 291 and 292.** `291_No_POM.spec.ts` inlines the locators; `292_POM.spec.ts` is the same test through `LoginPage`. Run both to see what moves out of the spec.
+
+**Where the test id attribute belongs.** TTACart tags elements with `data-test`, while `getByTestId()` looks for `data-testid`, so those calls silently match nothing. Rather than make every spec declare `test.use({ testIdAttribute: 'data-test' })`, each page object owns the detail:
+
+```ts
+constructor(page: Page) {
+    this.page = page;
+    const byTest = (id: string) => page.locator(`[data-test="${id}"]`);
+    this.title = byTest('title');
+    this.cartLink = byTest('shopping-cart-link');
+}
+```
+
+`selectors.setTestIdAttribute()` and the `testIdAttribute` config key both exist, but both are global, and the TTA practice pages in earlier modules genuinely use `data-testid`. Scoping it to the page object is what keeps both apps working.
+
+**Why a fat page object is cheap.** `pages/HeavyPage.ts` carries 100 locators and 112 methods on purpose, and `294_heavy_page.spec.ts` measures it:
+
+```ts
+const heavy = new HeavyPage(page);          // 100 locators, ~1ms
+const methods = Object.getOwnPropertyNames(HeavyPage.prototype);
+
+const another = new HeavyPage(page);        // 100 more locators
+expect(Object.getOwnPropertyNames(HeavyPage.prototype).length)
+    .toBe(methods.length);                  // but zero more methods
+```
+
+Locators are per-instance and lazy; methods live on the prototype and are shared. Neither grows the cost of a test that uses one of them.
+
+**Per-step screenshots.** `utils/stepScreenshot.ts` attaches a screenshot named `step-<index>-<name>`, which is the prefix `CustomReporter` matches to pin an image to each `test.step` (see section 15):
+
+```ts
+await test.step('open the cart', async () => {
+    await inventoryPage.openCart();
+    await shot(page, 3, 'cart');
+});
+```
+
+| Put in the page object | Keep in the test |
+|---|---|
+| Locators | Assertions about this scenario |
+| Navigation (`goto`) | Test data |
+| Reusable actions (`login`) | The order of steps |
+| App quirks (`data-test`) | What "correct" means |
+
+---
+
+## 39. Locator cheat sheet
 
 ```ts
 page.getByRole('button', { name: 'Submit' })   // preferred, accessibility based
@@ -2421,7 +2555,7 @@ Order of preference: role -> label -> placeholder -> text -> testid -> CSS/XPath
 
 ---
 
-## 39. Common assertions
+## 40. Common assertions
 
 ```ts
 await expect(page).toHaveTitle(/Playwright/);
@@ -2438,7 +2572,7 @@ All `expect` calls auto-wait, so you rarely need `waitForTimeout`.
 
 ---
 
-## 40. Troubleshooting
+## 41. Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
@@ -2451,7 +2585,7 @@ All `expect` calls auto-wait, so you rarely need `waitForTimeout`.
 
 ---
 
-## 41. Useful links
+## 42. Useful links
 
 - Playwright docs: https://playwright.dev/docs/intro
 - Codegen guide: https://playwright.dev/docs/codegen
