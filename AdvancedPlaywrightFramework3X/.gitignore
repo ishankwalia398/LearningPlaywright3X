@@ -6,3 +6,18 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Env
+.env
+
+# Generated reports
+/tta-report/
+/reports/
+/allure-results/
+/allure-report/
+
+# macOS
+.DS_Store
+
+# Logs (src/utils/logger.ts)
+/logs/

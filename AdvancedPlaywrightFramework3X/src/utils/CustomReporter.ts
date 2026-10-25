@@ -17,31 +17,10 @@ import {
 } from '@playwright/test/reporter';
 import * as fs from 'fs';
 import * as path from 'path';
-
-interface BuildSummary {
-    runId: string;
-    tests: Record<string, TestData['status']>;
-}
-
-interface FlakyResult {
-    flaky: string[];
-    counts: { flaky: number; failing: number; total: number };
-    summary?: string;
-}
-
-interface HealReport {
-    failedSelector: string;
-    intent: string;
-    verified: {
-        selector: string;
-        strategy: string;
-        matchCount: number;
-        visible: boolean;
-        reasoning: string;
-    }[];
-    rejected: { selector: string; reason: string }[];
-    unavailableReason?: string;
-}
+import { analyzeFailure, type RcaVerdict } from '../ai/agents/rcaAgent';
+import { analyzeFlaky, type BuildSummary, type FlakyResult } from '../ai/agents/flakyAnalyzer';
+import { hasApiKey } from '../ai/config/providers';
+import type { HealReport } from './selfHeal';
 
 export interface StepData {
     title: string;
@@ -117,6 +96,8 @@ class CustomTTAReporter implements Reporter {
     private completedTestIds: Set<string> = new Set();
     // AI-generated test data captured from `ai-data` attachments (for the AI Data tab).
     private aiData: { test: string; json: string }[] = [];
+    // RCA verdicts produced by the RCA AI agent for failed tests (AI Verdict tab).
+    private aiVerdicts: { test: string; file: string; verdict: RcaVerdict }[] = [];
     // Verified locator repairs captured from `self-heal` attachments (Self-Heal tab).
     private healReports: { test: string; report: HealReport }[] = [];
     // Flaky analysis comparing this build with the previous one (Flaky tab).
@@ -217,8 +198,8 @@ class CustomTTAReporter implements Reporter {
                 duration: step.duration || 0,
                 status: step.error ? 'failed' : 'passed',
                 startTime: new Date(step.startTime).toLocaleTimeString(),
-                error: step.error?.message,
-                stackTrace: step.error?.stack,
+                error: step.error?.message && this.stripAnsi(step.error.message),
+                stackTrace: step.error?.stack && this.stripAnsi(step.error.stack),
                 consoleLogs: [],
                 stepIndex: stepCounter,
                 videoStartTime: Math.max(0, videoStartTime),
@@ -262,7 +243,7 @@ class CustomTTAReporter implements Reporter {
         console.log('   ─────────────────────────────────────────────────────');
         console.log(`   ${statusIcon} RESULT: ${status.toUpperCase()} | Duration: ${testTime}`);
         if (result.error) {
-            console.log(`   ⚠️  Error: ${result.error.message?.substring(0, 80)}...`);
+            console.log(`   ⚠️  Error: ${this.stripAnsi(result.error.message ?? '').substring(0, 80)}...`);
         }
         console.log(`\n   📊 Running Total: ✅ ${this.suiteStats.passed} | ❌ ${this.suiteStats.failed} | ⏭️ ${this.suiteStats.skipped}`);
 
@@ -410,8 +391,8 @@ class CustomTTAReporter implements Reporter {
             logs: testLogs,
             video: videoPath,
             trace: tracePath,
-            error: result.error?.message,
-            errorStack: result.error?.stack,
+            error: result.error?.message && this.stripAnsi(result.error.message),
+            errorStack: result.error?.stack && this.stripAnsi(result.error.stack),
             tags: tagMatches,
         };
 
@@ -492,6 +473,7 @@ class CustomTTAReporter implements Reporter {
         console.log(`║  📈 Pass Rate: ${(passRate + '%').padEnd(47)}║`);
         console.log('╚════════════════════════════════════════════════════════════════╝');
 
+        await this.runRcaAnalysis();
         await this.runFlakyAnalysis();
 
         console.log('\n📊 Generating TTA HTML Report...');
@@ -523,9 +505,44 @@ class CustomTTAReporter implements Reporter {
         this.suiteStats = input.stats;
         this.reportMeta = input.meta;
 
+        await this.runRcaAnalysis();
         await this.runFlakyAnalysis();
         await this.generateReport();
         return this.outputFile;
+    }
+
+    // RCA AI agent: analyze each failed test via the LLM gateway and store a verdict.
+    private async runRcaAnalysis(): Promise<void> {
+        const failures = this.testResults.filter(
+            (t) => t.status === 'failed' || t.status === 'timedOut',
+        );
+        if (failures.length === 0) return;
+        if (!hasApiKey()) {
+            console.log('🤖 RCA agent: no LLM API key set — skipping AI verdict.');
+            return;
+        }
+
+        const cap = 10;
+        const toAnalyze = failures.slice(0, cap);
+        if (failures.length > cap) {
+            console.log(`🤖 RCA agent: analyzing first ${cap} of ${failures.length} failures.`);
+        } else {
+            console.log(`🤖 RCA agent analyzing ${toAnalyze.length} failure(s)...`);
+        }
+
+        for (const t of toAnalyze) {
+            try {
+                const verdict = await analyzeFailure({
+                    title: t.fullTitle,
+                    file: t.location,
+                    error: t.error ?? 'Unknown error',
+                    stack: t.errorStack,
+                });
+                this.aiVerdicts.push({ test: t.fullTitle, file: t.location, verdict });
+            } catch (e) {
+                console.warn(`RCA failed for ${t.title}: ${(e as Error).message}`);
+            }
+        }
     }
 
     // Snapshot this run's per-test statuses and load the previous snapshot.
@@ -568,19 +585,7 @@ class CustomTTAReporter implements Reporter {
             console.log('🔁 Flaky analyzer: only one build recorded — run again to compare.');
             return;
         }
-        const flaky = Object.keys(curr.tests).filter(
-            (title) => prev.tests[title] !== undefined && prev.tests[title] !== curr.tests[title],
-        );
-        this.flakyResult = {
-            flaky,
-            counts: {
-                flaky: flaky.length,
-                failing: Object.values(curr.tests).filter(
-                    (status) => status === 'failed' || status === 'timedOut',
-                ).length,
-                total: Object.keys(curr.tests).length,
-            },
-        };
+        this.flakyResult = await analyzeFlaky(prev, curr, hasApiKey());
         this.prevBuildId = prev.runId;
         this.currBuildId = curr.runId;
         console.log(
@@ -844,6 +849,9 @@ class CustomTTAReporter implements Reporter {
         <div id="tab-aidata" class="main-tab-panel">
             ${this.generateAiDataTab()}
         </div>
+        <div id="tab-verdict" class="main-tab-panel">
+            ${this.generateAiVerdictTab()}
+        </div>
         <div id="tab-selfheal" class="main-tab-panel">
             ${this.generateSelfHealTab()}
         </div>
@@ -966,10 +974,12 @@ class CustomTTAReporter implements Reporter {
     // Top-level tab bar: Test Results | AI Data | AI Verdict.
     private generateMainTabs(): string {
         const aiCount = this.aiData.length;
+        const rcaCount = this.aiVerdicts.length;
         return `
         <div class="main-tabs">
             <button class="main-tab active" onclick="switchMainTab('results', this)">📋 Test Results</button>
             <button class="main-tab" onclick="switchMainTab('aidata', this)">🤖 AI Data${aiCount ? ` (${aiCount})` : ''}</button>
+            <button class="main-tab" onclick="switchMainTab('verdict', this)">⚖️ AI Verdict${rcaCount ? ` (${rcaCount})` : ''}</button>
             <button class="main-tab" onclick="switchMainTab('flaky', this)">🔁 Flaky${this.flakyResult ? ` (${this.flakyResult.counts.flaky})` : ''}</button>
             <button class="main-tab" onclick="switchMainTab('selfheal', this)">🩹 Self-Heal${this.healReports.length ? ` (${this.healReports.length})` : ''}</button>
         </div>`;
@@ -1037,6 +1047,34 @@ class CustomTTAReporter implements Reporter {
             </div>
             <div class="flaky-list">${flakyList}</div>
             ${summary}
+        </div>`;
+    }
+
+    // AI Verdict tab body: one RCA card per failed test.
+    private generateAiVerdictTab(): string {
+        if (this.aiVerdicts.length === 0) {
+            return `<div class="ai-empty">⚖️ No AI verdicts — no failures analyzed in this run.</div>`;
+        }
+        return `<div class="ai-data-list">${this.aiVerdicts.map((v) => this.renderVerdictCard(v)).join('')}</div>`;
+    }
+
+    // Render a single RCA verdict: severity, priority, root cause, fix bullets.
+    private renderVerdictCard(v: { test: string; file: string; verdict: RcaVerdict }): string {
+        const sevClass = `sev-${v.verdict.severity.toLowerCase()}`;
+        const fixes = v.verdict.fixes.length
+            ? v.verdict.fixes.map((f) => `<li>${this.escapeHtml(f)}</li>`).join('')
+            : '<li>No fix suggestions returned.</li>';
+        return `
+        <div class="ai-card">
+            <div class="ai-card-title">⚖️ ${this.escapeHtml(v.test)} <span class="verdict-file">${this.escapeHtml(v.file)}</span></div>
+            <div class="verdict-body">
+                <div class="verdict-badges">
+                    <span class="verdict-badge ${sevClass}">Severity: ${this.escapeHtml(v.verdict.severity)}</span>
+                    <span class="verdict-badge prio">Priority: ${this.escapeHtml(v.verdict.priority)}</span>
+                </div>
+                <div class="verdict-root"><strong>Root cause:</strong> ${this.escapeHtml(v.verdict.rootCause)}</div>
+                <div class="verdict-fixes"><strong>How to fix:</strong><ul>${fixes}</ul></div>
+            </div>
         </div>`;
     }
 

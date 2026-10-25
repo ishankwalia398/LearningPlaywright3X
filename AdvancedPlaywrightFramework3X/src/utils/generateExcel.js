@@ -1,6 +1,6 @@
 /**
- * Generates test-data/login-data.xlsx from the same rows used by CSV/JSON/YAML.
- * Run:  node tests/19_Data_Driven_Testing/util/generateExcel.js
+ * Generates src/testdata/login-data.xlsx from the same rows used by CSV/JSON/YAML.
+ * Run:  node src/utils/generateExcel.js
  */
 const path = require('path');
 const ExcelJS = require('exceljs');
@@ -24,7 +24,7 @@ const rows = [
     rows.forEach((r) => sheet.addRow(r));
     sheet.columns.forEach((c) => (c.width = 24));
 
-    const out = path.join(__dirname, '..', 'test-data', 'login-data.xlsx');
+    const out = path.join(__dirname, '..', 'testdata', 'login-data.xlsx');
     await workbook.xlsx.writeFile(out);
     console.log(`Wrote ${rows.length} rows -> ${out}`);
 })();
