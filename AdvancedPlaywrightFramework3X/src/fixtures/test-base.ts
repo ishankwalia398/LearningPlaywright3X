@@ -24,15 +24,15 @@
 
 
 import { test as base, expect } from '@playwright/test';
-import { LoginPage } from '@pages/LoginPage';
-import { InventoryPage } from '@pages/InventoryPage';
-import { ItemDetailPage } from '@pages/ItemDetailPage';
-import { CartPage } from '@pages/CartPage';
-import { CheckoutStepOnePage } from '@pages/CheckoutStepOnePage';
-import { CheckoutStepTwoPage } from '@pages/CheckoutStepTwoPage';
-import { CheckoutCompletePage } from '@pages/CheckoutCompletePage';
+import { LoginPage } from '../pages/LoginPage';
+import { InventoryPage } from '../pages/InventoryPage';
+import { ItemDetailPage } from '../pages/ItemDetailPage';
+import { CartPage } from '../pages/CartPage';
+import { CheckoutStepOnePage } from '../pages/CheckoutStepOnePage';
+import { CheckoutStepTwoPage } from '../pages/CheckoutStepTwoPage';
+import { CheckoutCompletePage } from '../pages/CheckoutCompletePage';
 
-import loginTestData from '@testdata/logintestdata.json';
+import loginTestData from '../testdata/logintestdata.json';
 
 
 type LoginRecord = {
