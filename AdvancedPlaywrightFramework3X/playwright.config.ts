@@ -9,6 +9,30 @@ import 'dotenv/config';
 // import path from 'path';
 // dotenv.config({ path: path.resolve(__dirname, '.env') });
 
+function resolveBaseURL(): string {
+  if (process.env.BASE_URL) {
+    return process.env.BASE_URL;
+  }
+  const env = (process.env.TTA_ENV || 'qa').toLowerCase();
+  switch (env) {
+    case 'stg':
+    case 'stage':
+    case 'staging':
+      return process.env.STG_BASE_URL || 'https://stage.thetestingacademy.com';
+    case 'prod':
+    case 'production':
+      return process.env.PROD_BASE_URL || 'https://app.thetestingacademy.com';
+    case 'dev':
+    case 'local':
+      return process.env.DEV_BASE_URL || 'http://localhost:3000';
+    case 'api':
+      return process.env.API_BASE_URL || 'https://restful-booker.herokuapp.com';
+    case 'qa':
+    default:
+      return process.env.QA_BASE_URL || 'https://app.thetestingacademy.com';
+  }
+}
+
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
@@ -21,7 +45,7 @@ export default defineConfig({
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
   /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
+  workers: process.env.CI ? 1 : 2,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: [
     ['line'],
@@ -30,11 +54,10 @@ export default defineConfig({
   ],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
-    headless: false,
+    headless: !!process.env.CI,
     viewport: { width: 1920, height: 1080 },
     /* Base URL to use in actions like `await page.goto('')`. */
-    baseURL: process.env.BASE_URL,
-    // baseURL: 'http://localhost:3000',
+    baseURL: resolveBaseURL(),
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     //trace: 'on-first-retry',
