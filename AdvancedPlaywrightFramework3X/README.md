@@ -14,6 +14,8 @@ Built by [The Testing Academy](https://thetestingacademy.com).
 | Logging | `winston` (console + `logs/combined.log`) |
 | Reporting | TTA custom reporter, Playwright HTML report |
 | Test data | CSV, YAML, Excel (`exceljs`), MySQL (`mysql2`), `@faker-js/faker` |
+| API assertions | `jsonpath-plus` (JSONPath), `ajv` + `ajv-formats` (JSON Schema) |
+| LLM | `LLMGateway` over Groq, OpenRouter, OpenAI, Anthropic, DeepSeek (built-in `fetch`, no SDKs) |
 | CI | GitHub Actions |
 
 ## Folder structure
@@ -21,13 +23,13 @@ Built by [The Testing Academy](https://thetestingacademy.com).
 ```
 AdvancePlaywrightFramework3x
 ├── src/
-│   ├── ai/          → AI helpers used by the TTA report (RCA, flaky analysis)
+│   ├── ai/          → LLMGateway (Groq, OpenRouter, OpenAI, Claude, DeepSeek), prompts/, and the report's RCA and flaky agents
 │   ├── api/         → BookingApi: restful-booker service object with managed auth token
 │   ├── config/      → env.ts (reads .env), credentials.ts (TTACart login)
 │   ├── fixtures/    → test-base.ts: page-object and login-state fixtures; booker.fixture.ts: BookingApi and token
 │   ├── pages/       → BasePage + 7 TTACart page objects (login to checkout complete)
-│   ├── testdata/    → Test data files (logintestdata.json: the six TTACart users; booking.data.ts: random bookings)
-│   ├── tests/       → Test cases (*.spec.ts), e2e/ for full checkout journeys, apiTests/ for API specs
+│   ├── testdata/    → Test data files (logintestdata.json: the six TTACart users; booking.data.ts: random bookings; jsonschema/: AJV schemas)
+│   ├── tests/       → Test cases (*.spec.ts), e2e/ for full checkout journeys, apiTests/ for API specs, aiTests/ for LLM-backed specs
 │   └── utils/       → UtilElementLocator, logger, reporter, DataGenerator, visualSteps, ApiHelper, data readers
 ├── docs/
 ├── rules/
@@ -66,6 +68,8 @@ npx playwright test --debug                  # step through with the inspector
 ATTACH_SCREENSHOTS=true npx playwright test src/tests/e2e   # e2e specs with step screenshots
 
 BASE_URL=https://restful-booker.herokuapp.com npx playwright test src/tests/apiTests   # API specs
+
+npx playwright test src/tests/aiTests --project=chromium   # LLM specs (need an LLM key in .env)
 ```
 
 The e2e specs in [src/tests/e2e/](src/tests/e2e/) all run the same TTACart checkout, each showing a different technique:
@@ -95,13 +99,21 @@ The specs in [src/tests/apiTests/02_restfulbooker_apiHelper/](src/tests/apiTests
 | [create-booking.spec.ts](src/tests/apiTests/02_restfulbooker_apiHelper/create-booking.spec.ts) | `api.post` and typed parsing, with logged `test.step` blocks |
 | [update-booking.spec.ts](src/tests/apiTests/02_restfulbooker_apiHelper/update-booking.spec.ts) | Token, create, then `api.put` with a `Cookie` header |
 
-The spec in [src/tests/apiTests/03_restfulbooker_fixture_e2e/](src/tests/apiTests/03_restfulbooker_fixture_e2e/) runs the full lifecycle through [BookingApi and its fixture](#10-bookingapi-service-and-fixture):
+The specs in [src/tests/apiTests/03_restfulbooker_fixture_e2e/](src/tests/apiTests/03_restfulbooker_fixture_e2e/) run the full lifecycle through [BookingApi and its fixture](#10-bookingapi-service-and-fixture):
 
 | Spec | Shows |
 |---|---|
 | [booking-crud.e2e.spec.ts](src/tests/apiTests/03_restfulbooker_fixture_e2e/booking-crud.e2e.spec.ts) | Create, update, read back, delete, then confirm a 404 |
+| [booking-crud.e2e_PonyTail_Review.spec.ts](src/tests/apiTests/03_restfulbooker_fixture_e2e/booking-crud.e2e_PonyTail_Review.spec.ts) | The lifecycle spec after a readability pass: one payload per test, `toEqual` on the whole booking |
 
-> **`npx playwright test` also picks up these specs.** The specs in `01_restfulbooker_raw/` and `02_restfulbooker_apiHelper/` mostly use relative paths such as `/booking`, so they fail unless `BASE_URL` points at restful-booker. The `03_restfulbooker_fixture_e2e/` spec does not need it, because `BookingApi` defaults to the full restful-booker URL. See [08: Raw API tests](#08-raw-api-tests).
+The next two folders check the create-booking response in more detail:
+
+| Spec | Shows |
+|---|---|
+| [04_jsonpathplus/booking-crud.e2e.spec.ts](src/tests/apiTests/04_jsonpathplus/booking-crud.e2e.spec.ts) | Each booking field read by its JSONPath, see [11](#11-jsonpath-field-checks) |
+| [05_ajv_jsonschema_validator/booking-crud.e2e.spec.ts](src/tests/apiTests/05_ajv_jsonschema_validator/booking-crud.e2e.spec.ts) | The response validated against a JSON Schema with AJV, then the same JSONPath checks, see [12](#12-json-schema-validation-ajv) |
+
+> **`npx playwright test` also picks up these specs.** The specs in `01_restfulbooker_raw/` and `02_restfulbooker_apiHelper/` mostly use relative paths such as `/booking`, so they fail unless `BASE_URL` points at restful-booker. The specs in `03_`, `04_` and `05_` do not need it, because they go through `BookingApi`, which defaults to the full restful-booker URL. See [08: Raw API tests](#08-raw-api-tests).
 
 Default run settings (see [playwright.config.ts](playwright.config.ts)):
 
@@ -143,6 +155,9 @@ TTA_ENV=stg npx playwright test
 | `CHECKOUT_FIRST_NAME`, `CHECKOUT_LAST_NAME`, `CHECKOUT_POSTAL_CODE` | Optional fixed customer for `DataGenerator.checkoutCustomerFromEnv()` |
 | `LOG_LEVEL` | Logging verbosity |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY` | Optional, enables the AI Verdict tab |
+| `LLM_PROVIDER`, `LLM_ALLOWED_PROVIDERS` | Which LLM the [LLMGateway](src/ai/LLMGateway.ts) calls, and the company allowlist |
+| `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` | LLM keys; set only the ones you use. `<PROVIDER>_MODEL` overrides the default model |
+| `LLM_TIMEOUT_MS`, `LLM_MAX_RETRIES` | Optional, gateway timeout (default 60000) and retries (default 2) |
 | `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE` | Optional, MySQL data-driven tests |
 
 > **Why `STANDARD_USER` and not `USERNAME`:** Windows always sets `USERNAME` to your login name, and dotenv does not overwrite variables that already exist, so a `USERNAME` in `.env` is silently ignored on Windows.
@@ -201,7 +216,7 @@ flowchart TD
     class E,L,G,PW,W util
 ```
 
-API specs take a parallel path with no browser: raw `request` calls ([08](#08-raw-api-tests)), then [ApiHelper](#09-apihelper) ([09](#09-apihelper)), then the [BookingApi service and fixture](#10-bookingapi-service-and-fixture) ([10](#10-bookingapi-service-and-fixture)).
+API specs take a parallel path with no browser: raw `request` calls ([08](#08-raw-api-tests)), then [ApiHelper](#09-apihelper) ([09](#09-apihelper)), then the [BookingApi service and fixture](#10-bookingapi-service-and-fixture) ([10](#10-bookingapi-service-and-fixture)). Responses are then checked field by field with [JSONPath](#11-jsonpath-field-checks) ([11](#11-jsonpath-field-checks)) and as a whole against a [JSON Schema](#12-json-schema-validation-ajv) ([12](#12-json-schema-validation-ajv)).
 
 ### 01: BasePage
 
@@ -722,6 +737,169 @@ test.describe.serial('@e2e @P0 Level 3 - Booking lifecycle (token from fixture)'
     });
 });
 ```
+
+### 11: JSONPath field checks
+
+**Concept:** [jsonpath-plus](https://github.com/JSONPath-Plus/JSONPath) reads a value out of JSON with a path string such as `$.booking.bookingdates.checkin`, the way XPath reads XML. The spec in [04_jsonpathplus/](src/tests/apiTests/04_jsonpathplus/) checks every field of the create-booking response by its path.
+
+**Why:** A path names the exact field under test, which keeps assertions readable on deep, nested responses.
+
+**Q&A: why use this?**
+- **Q: Why does my path return `[]`?** A: The path starts from whatever you pass as `json`. The spec passes the whole response `{ bookingid, booking }`, so paths begin with `$.booking`. Passing `booking` itself and asking for `$.booking.firstname` finds nothing.
+- **Q: Why `wrap: false`?** A: JSONPath returns an array of matches by default, so `toBe('E2E')` fails against `['E2E']`. With `wrap: false` a single match comes back as the value itself.
+- **Q: When is it better than `response.booking.firstname`?** A: When the shape is deep or varies. Recursive paths such as `$..firstname` and filters such as `$.items[?(@.price > 100)]` replace loops. For one fixed field, plain property access is just as good.
+
+```mermaid
+flowchart LR
+    R["response"] --> I["bookingid"]
+    R --> B["booking"]
+    B --> F["firstname"]
+    B --> O["lastname, totalprice,<br/>depositpaid, additionalneeds"]
+    B --> D["bookingdates"]
+    D --> CI["checkin"]
+    D --> CO["checkout"]
+    P1["$.booking.firstname"] -.->|picks| F
+    P2["$.booking.bookingdates.checkin"] -.->|picks| CI
+
+    classDef spec fill:#e8f0fe,stroke:#1a73e8,color:#0b2a5b
+    classDef pom fill:#e6f4ea,stroke:#1e8e3e,color:#0d3b1e
+    classDef util fill:#fef7e0,stroke:#f9ab00,color:#4a3500
+    class R,B,D pom
+    class I,F,O,CI,CO spec
+    class P1,P2 util
+```
+
+```ts
+// src/tests/apiTests/04_jsonpathplus/booking-crud.e2e.spec.ts
+const payload = buildBookingFromGenerator({ firstname: 'E2E', lastname: 'Journey' });
+const response = await bookingApi.createBooking(payload);
+
+const firstname = JSONPath({ path: '$.booking.firstname', json: response, wrap: false });
+const totalprice = JSONPath({ path: '$.booking.totalprice', json: response, wrap: false });
+const checkin = JSONPath({ path: '$.booking.bookingdates.checkin', json: response, wrap: false });
+
+expect(firstname).toBe(payload.firstname);
+expect(totalprice).toBe(payload.totalprice);
+expect(checkin).toBe(payload.bookingdates.checkin);
+```
+
+### 12: JSON Schema validation (AJV)
+
+**Concept:** [AJV](https://ajv.js.org/) checks a JSON response against a JSON Schema: which fields must exist, their types, formats such as dates, and whether extra fields are allowed. The schema lives in [src/testdata/jsonschema/create-booking.schema.json](src/testdata/jsonschema/create-booking.schema.json), apart from the spec.
+
+**Why:** Value checks confirm that what you sent came back; a schema check also catches a changed contract, such as a renamed field or a number turned into a string, on fields you never assert on.
+
+**Q&A: why use this?**
+- **Q: What does this schema enforce?** A: `bookingid` is an integer of at least 1. `booking` has non-empty names, a numeric `totalprice`, a boolean `depositpaid`, `YYYY-MM-DD` dates and an optional `additionalneeds`, and `additionalProperties: false` rejects any field it does not list.
+- **Q: Why `allErrors` and `ajv-formats`?** A: `allErrors: true` reports every broken field in one run instead of only the first. AJV 8 ships no formats, so without `ajv-formats` compiling the schema throws `unknown format "date"`.
+- **Q: What's the gotcha?** A: Pass AJV's error text as the assertion message. A bare `expect(isValid).toBe(true)` fails with "expected true, received false" and no hint of which field broke.
+
+```mermaid
+flowchart LR
+    S["create-booking.schema.json"] -->|ajv.compile, once per file| V["validateCreateBooking()"]
+    R["POST /booking response"] --> V
+    V -->|true| OK["value checks run next"]
+    V -->|false| E["ajv.errorsText(errors)<br/>data/booking/totalprice must be number"]
+
+    classDef spec fill:#e8f0fe,stroke:#1a73e8,color:#0b2a5b
+    classDef pom fill:#e6f4ea,stroke:#1e8e3e,color:#0d3b1e
+    classDef util fill:#fef7e0,stroke:#f9ab00,color:#4a3500
+    class S,R spec
+    class V,OK pom
+    class E util
+```
+
+```ts
+// src/tests/apiTests/05_ajv_jsonschema_validator/booking-crud.e2e.spec.ts
+import Ajv from 'ajv';
+import addFormats from 'ajv-formats';
+import createBookingSchema from '@testdata/jsonschema/create-booking.schema.json';
+
+const ajv = new Ajv({ allErrors: true });
+addFormats(ajv);
+const validateCreateBooking = ajv.compile(createBookingSchema);
+
+// inside the test
+const response = await bookingApi.createBooking(payload);
+const isValid = validateCreateBooking(response);
+expect(isValid, ajv.errorsText(validateCreateBooking.errors)).toBe(true);
+```
+
+A broken response fails with every problem listed at once:
+
+```
+data/booking must have required property 'lastname', data/booking must NOT have additional properties,
+data/booking/totalprice must be number, data/booking/bookingdates/checkin must match format "date"
+```
+
+| Check | Catches | Use it when |
+|---|---|---|
+| `toEqual(payload)` | Any value that differs from what you sent | You know the whole expected object |
+| JSONPath | One named field's value | The response is deep, or you only care about some fields |
+| AJV schema | Missing or extra fields, wrong types, bad formats | You want to guard the contract, including fields you never assert on |
+
+### 13: LLM Gateway and AI test data
+
+**Concept:** [LLMGateway.ts](src/ai/LLMGateway.ts) is one class that sends a prompt to whichever LLM provider your company allows (Groq, OpenRouter, OpenAI, Anthropic Claude or DeepSeek) and gives back parsed JSON, or writes it to a file. [DataGenerator.checkoutCustomerAI()](src/utils/DataGenerator.ts) uses it to create the checkout customer in [e2e-checkout_DataGenAI.spec.ts](src/tests/aiTests/e2e-checkout_DataGenAI.spec.ts), with its prompt kept in [src/ai/prompts/](src/ai/prompts/checkoutCustomer.prompt.md).
+
+**Why:** Teams get approval for different providers, so a test should ask for "an LLM" and let `.env` decide which one, instead of each test speaking one vendor's API.
+
+**Q&A: why use this?**
+- **Q: How do I pick a provider?** A: Set `LLM_PROVIDER=groq` (or `openrouter`, `openai`, `anthropic`, `deepseek`) and its `*_API_KEY`. With `LLM_PROVIDER` empty, the first provider that has a key is used, free ones first. `LLM_ALLOWED_PROVIDERS=groq,openrouter` makes the gateway refuse any provider your company has not approved.
+- **Q: What if the model wraps the JSON in markdown or adds a sentence?** A: `askJson()` asks for JSON only, uses the provider's JSON mode where it is reliable, and then pulls the first valid JSON block out of the reply. If there is none, it throws `LLMGatewayError` with the raw reply attached.
+- **Q: What's the gotcha?** A: The same prompt gives the same answer, even at temperature 1: three calls once returned "Marisol, 63108" every time. The prompt has `{{FIRST_INITIAL}}`, `{{LAST_INITIAL}}` and `{{STATE}}` placeholders that Faker fills in before each call, so every customer is different. Also, the checkout test now fails if the LLM is unreachable; use `DataGenerator.checkoutCustomer()` where that is not acceptable.
+
+```mermaid
+flowchart LR
+    S["checkout spec"] --> D["DataGenerator.checkoutCustomerAI()"]
+    P["prompts/checkoutCustomer.prompt.md"] -->|placeholders filled by Faker| D
+    D --> G["LLMGateway.askJson()"]
+    E[".env: LLM_PROVIDER,<br/>LLM_ALLOWED_PROVIDERS, *_API_KEY"] --> G
+    G -->|"OpenAI-style /chat/completions"| O["Groq, OpenRouter,<br/>OpenAI, DeepSeek"]
+    G -->|"/v1/messages"| A["Anthropic Claude"]
+    O --> J["extractJson()"]
+    A --> J
+    J -->|"{ firstName, lastName, postalCode }"| F["checkoutStepOnePage.fillGuest()"]
+
+    classDef spec fill:#e8f0fe,stroke:#1a73e8,color:#0b2a5b
+    classDef pom fill:#e6f4ea,stroke:#1e8e3e,color:#0d3b1e
+    classDef util fill:#fef7e0,stroke:#f9ab00,color:#4a3500
+    class S,F spec
+    class D,G,J pom
+    class P,E,O,A util
+```
+
+```ts
+// src/utils/DataGenerator.ts
+static async checkoutCustomerAI(): Promise<CheckoutCustomer> {
+    const prompt = fs
+        .readFileSync(path.resolve(__dirname, '../ai/prompts/checkoutCustomer.prompt.md'), 'utf8')
+        .replace('{{FIRST_INITIAL}}', faker.string.alpha({ casing: 'upper' }))
+        .replace('{{LAST_INITIAL}}', faker.string.alpha({ casing: 'upper' }))
+        .replace('{{STATE}}', faker.location.state());
+    const { data } = await new LLMGateway().askJson<CheckoutCustomer>(prompt, { temperature: 1 });
+    // ...checks that firstName, lastName and postalCode are non-empty strings
+    return { firstName: data.firstName, lastName: data.lastName, postalCode: data.postalCode };
+}
+
+// src/tests/aiTests/e2e-checkout_DataGenAI.spec.ts
+await checkoutStepOnePage.fillGuest(await DataGenerator.checkoutCustomerAI());
+
+// Anywhere else: JSON back, or straight to a file
+const llm = new LLMGateway();                         // or new LLMGateway({ provider: 'groq' })
+const { data } = await llm.askJson<{ cases: string[] }>('Give 3 negative login test cases as {"cases": [...]}');
+await llm.askJsonToFile('...prompt...', 'reports/ai/login-cases.json');
+```
+
+| Provider | `LLM_PROVIDER` | Key | Default model | Cost |
+|---|---|---|---|---|
+| Groq | `groq` | `GROQ_API_KEY` | `llama-3.3-70b-versatile` | Free tier |
+| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` | `meta-llama/llama-3.3-70b-instruct:free` | Free `:free` models |
+| DeepSeek | `deepseek` | `DEEPSEEK_API_KEY` | `deepseek-chat` | Paid, low cost |
+| OpenAI | `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` | Paid |
+| Anthropic | `anthropic` | `ANTHROPIC_API_KEY` | `claude-haiku-5-5` | Paid |
+
+Override any model with `<PROVIDER>_MODEL`, for example `GROQ_MODEL=...`.
 
 ## Writing tests
 
