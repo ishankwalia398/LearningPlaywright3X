@@ -28,7 +28,7 @@ test.describe.serial('@e2e @P0 Level 3 - Booking lifecycle (BookingApi fixture)'
         const payload = buildBookingFromGenerator({ firstname: 'E2E', lastname: 'Journey' });
         const response = await bookingApi.createBooking(payload);
         const { bookingid, booking } = response;
-
+        
         const isValid = validateCreateBooking(response);
         expect(isValid, ajv.errorsText(validateCreateBooking.errors)).toBe(true);
 

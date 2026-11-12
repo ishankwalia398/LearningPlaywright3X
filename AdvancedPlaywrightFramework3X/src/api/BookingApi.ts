@@ -1,9 +1,9 @@
-// All the payloads which we have
+// All the payloads which we have 
 // create
-// How you can serialize or deserialize your responses
-// You can perform a JSON schema validation.
-// How you can basically perform the json path plus
-// Now you can similarly use auth or even JWT token, whatever
+// How you can serialize or deserialize your responses 
+// You can perform a JSON schema validation. 
+// How you can basically perform the json path plus 
+// Now you can similarly use auth or even JWT token, whatever 
 
 import { APIResponse } from '@playwright/test';
 import { ApiHelper, ApiContext } from '@utils/ApiHelper';

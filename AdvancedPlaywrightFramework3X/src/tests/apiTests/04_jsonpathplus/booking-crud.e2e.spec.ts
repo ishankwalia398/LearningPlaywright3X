@@ -19,8 +19,8 @@ test.describe.serial('@e2e @P0 Level 3 - Booking lifecycle (BookingApi fixture)'
         const payload = buildBookingFromGenerator({ firstname: 'E2E', lastname: 'Journey' });
         const response = await bookingApi.createBooking(payload);
         const { bookingid, booking } = response;
-
-
+        
+        
         expect(bookingid).toBeGreaterThan(0);
         expect(booking).toEqual(payload);
 
@@ -39,6 +39,11 @@ test.describe.serial('@e2e @P0 Level 3 - Booking lifecycle (BookingApi fixture)'
         expect(checkin).toBe(payload.bookingdates.checkin);
         expect(checkout).toBe(payload.bookingdates.checkout);
         expect(additionalneeds).toBe(payload.additionalneeds);
+
+        
+
+
+
 
 
     });
